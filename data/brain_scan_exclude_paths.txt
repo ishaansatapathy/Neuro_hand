@@ -1,0 +1,5 @@
+# Optional: one substring per line. If a resolved image path contains the substring, it is skipped during training.
+# Use forward slashes or backslashes; paths are normalized. Lines starting with # are ignored.
+# Examples (uncomment to use):
+# External_test
+# dataset/Dataset_MRI_Folder/some_noisy_folder

@@ -1,0 +1,23 @@
+{
+  "n_docs": 18,
+  "labels_seen": [
+    "cerebrovascular",
+    "general_other",
+    "demyelinating"
+  ],
+  "weak_label_counts": {
+    "cerebrovascular": 3,
+    "general_other": 13,
+    "demyelinating": 2
+  },
+  "vectorizer": "TfidfVectorizer",
+  "classifier": "LogisticRegression",
+  "paths_preview": [
+    "report\\WhatsApp Image 2026-04-15 at 19.11.27.jpeg",
+    "report\\WhatsApp Image 2026-04-15 at 19.11.28.jpeg",
+    "report\\WhatsApp Image 2026-04-15 at 19.11.39.jpeg",
+    "report\\WhatsApp Image 2026-04-15 at 19.12.07.jpeg",
+    "report\\WhatsApp Image 2026-04-15 at 19.12.31.jpeg"
+  ],
+  "note": "Weak labels from keywords \u2014 for demo pipeline only."
+}

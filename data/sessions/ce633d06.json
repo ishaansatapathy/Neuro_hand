@@ -1,0 +1,21 @@
+{
+  "session_id": "ce633d06",
+  "status": "active",
+  "started_at": "2026-04-17T02:36:46.071169",
+  "ended_at": null,
+  "config": {
+    "affected_hand": "right",
+    "exercises": [
+      "open_hand",
+      "fist",
+      "point"
+    ],
+    "difficulty": "medium",
+    "duration_minutes": 3
+  },
+  "score": 0,
+  "exercises_completed": 0,
+  "total_exercises": 9,
+  "timeline": [],
+  "duration_seconds": 0
+}

@@ -1,0 +1,26 @@
+{
+  "arch": "efficientnet_b1",
+  "n_classes": 3,
+  "class_to_idx": {
+    "Hemorrhagic Stroke": 0,
+    "Ischemic Stroke": 1,
+    "Normal": 2
+  },
+  "idx_to_class": {
+    "0": "Hemorrhagic Stroke",
+    "1": "Ischemic Stroke",
+    "2": "Normal"
+  },
+  "img_size": 224,
+  "classifier_dropout": 0.3,
+  "best_val_acc": 0.7065,
+  "test_acc": 0.7194,
+  "dataset": "BTX24/tekno21-brain-stroke-dataset-multi",
+  "total_samples": 7202,
+  "train_samples": 5402,
+  "val_samples": 1080,
+  "test_samples": 720,
+  "training_timestamp": "2026-04-16 22:10:53",
+  "version": "v3-hf",
+  "stroke_zone_analysis": true
+}

@@ -1,0 +1,39 @@
+{
+  "arch": "efficientnet_b0",
+  "n_classes": 7,
+  "class_to_idx": {
+    "Alzheimer": 0,
+    "Cerebral Calcinosi": 1,
+    "Epilepsy": 2,
+    "Meningioma": 3,
+    "Multiple Sclerosis": 4,
+    "Normal": 5,
+    "Stroke": 6
+  },
+  "idx_to_class": {
+    "0": "Alzheimer",
+    "1": "Cerebral Calcinosi",
+    "2": "Epilepsy",
+    "3": "Meningioma",
+    "4": "Multiple Sclerosis",
+    "5": "Normal",
+    "6": "Stroke"
+  },
+  "img_size": 224,
+  "best_val_acc": 0.1876,
+  "train_samples": 10083,
+  "val_samples": 1780,
+  "class_counts": {
+    "Stroke": 5000,
+    "Normal": 5000,
+    "Alzheimer": 717,
+    "Multiple Sclerosis": 1003,
+    "Meningioma": 57,
+    "Epilepsy": 30,
+    "Cerebral Calcinosi": 56
+  },
+  "training_timestamp": "2026-04-16 01:48:25",
+  "version": "v2",
+  "quick_mode": false,
+  "medium_mode": true
+}

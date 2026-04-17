@@ -1,0 +1,49 @@
+# Private health documents (PDFs, images, scans) — never commit
+data/patient-reports/nani/**
+data/patient-reports/me/**
+!data/patient-reports/nani/.gitkeep
+!data/patient-reports/me/.gitkeep
+
+# All report / scan / document files in one place — never commit
+report/**
+!report/.gitkeep
+
+# OCR + derived text from reports (sensitive)
+data/processed/reports/
+
+# Local secrets & env
+.env
+.env.local
+.env.*.local
+
+# Python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.venv/
+venv/
+
+# Dependencies & build
+node_modules/
+website/node_modules/
+
+# Tooling / editor
+.claude/
+
+# Debug logs
+debug-*.log
+
+# Uploaded patient scans (local only)
+data/scans/*
+!data/scans/.gitkeep
+
+# Large local datasets & caches (multi‑GB — use releases or LFS if needed)
+data/raw/
+data/processed/
+data/voice_cache/
+
+# Large ML weights (keep *.json meta in repo; add checkpoint paths as needed)
+*.pt
+*.pth
+*.onnx
+*.bin

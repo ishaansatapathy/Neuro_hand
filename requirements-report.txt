@@ -1,0 +1,5 @@
+# OCR + small text classifier for report/ folder
+# pip install -r requirements-report.txt
+easyocr>=1.7.0
+# Optional PDF text (install one):
+# pymupdf>=1.24.0
