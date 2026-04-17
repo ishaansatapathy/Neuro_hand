@@ -7,7 +7,8 @@
     "dev": "vite",
     "build": "tsc -b && vite build",
     "lint": "eslint .",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "start": "serve -s dist -l tcp://0.0.0.0:8080"
   },
   "dependencies": {
     "@fontsource/geist-sans": "^5.2.5",
@@ -19,6 +20,7 @@
     "react-dom": "^19.2.4",
     "react-router-dom": "^7.14.1",
     "recharts": "^3.8.1",
+    "serve": "^14.2.6",
     "three": "^0.183.2"
   },
   "devDependencies": {
