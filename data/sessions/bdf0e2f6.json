@@ -1,0 +1,26 @@
+{
+  "session_id": "bdf0e2f6",
+  "status": "completed",
+  "started_at": "2026-04-17T10:26:44.451993",
+  "ended_at": "2026-04-17T10:26:59.580128",
+  "config": {
+    "affected_hand": "left",
+    "exercises": [
+      "fist",
+      "half_fist",
+      "tripod_grasp",
+      "lateral_pinch",
+      "claw",
+      "relaxed_spread",
+      "arm_raise",
+      "shoulder_abduct"
+    ],
+    "difficulty": "medium",
+    "duration_minutes": 5
+  },
+  "score": 0,
+  "exercises_completed": 0,
+  "total_exercises": 24,
+  "timeline": [],
+  "duration_seconds": 15
+}

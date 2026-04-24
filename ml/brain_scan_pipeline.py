@@ -93,10 +93,12 @@ def run_classification(
 
     meta = metadata or {}
     img_size = int(meta.get("img_size", 224))
-
+    # Match train_brain_scan.py validation: resize (shortest edge) then center crop, not squashed square resize
+    rbc = int(img_size * 1.1)
     tf = transforms.Compose(
         [
-            transforms.Resize((img_size, img_size)),
+            transforms.Resize(rbc),
+            transforms.CenterCrop(img_size),
             transforms.ToTensor(),
             transforms.Normalize(
                 mean=[0.485, 0.456, 0.406],

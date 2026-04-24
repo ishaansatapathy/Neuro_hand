@@ -54,14 +54,14 @@ function StatCard({ icon: Icon, label, value, color }: {
   color: string
 }) {
   return (
-    <div className="liquid-glass rounded-2xl p-5 card-spotlight">
+    <div className="liquid-glass rounded-2xl p-5 card-spotlight border border-white/6 group hover:border-white/12 transition-all duration-300 hover:-translate-y-0.5">
       <div className="flex items-center gap-3 mb-3">
-        <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${color}`}>
+        <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${color} transition-transform duration-300 group-hover:scale-110`}>
           <Icon className="w-5 h-5" />
         </div>
-        <span className="text-sm text-gray-400">{label}</span>
+        <span className="text-sm text-foreground/45">{label}</span>
       </div>
-      <p className="text-3xl font-bold text-gradient">{value}</p>
+      <p className="text-3xl font-bold text-gradient-brand">{value}</p>
     </div>
   )
 }
@@ -101,10 +101,10 @@ function SessionRow({ session }: { session: SessionData }) {
     ? 'bg-green-500/20 text-green-400 border-green-500/30'
     : session.status === 'active'
     ? 'bg-blue-500/20 text-blue-400 border-blue-500/30'
-    : 'bg-gray-500/20 text-gray-400 border-gray-500/30'
+    : 'bg-white/5 text-foreground/40 border-white/10'
 
   return (
-    <div className="liquid-glass rounded-xl overflow-hidden transition-all duration-300">
+    <div className="liquid-glass rounded-xl overflow-hidden transition-all duration-300 border border-white/[0.06] hover:border-white/[0.10]">
       <button
         onClick={() => setExpanded(!expanded)}
         className="w-full px-5 py-4 flex items-center gap-4 text-left hover:bg-white/5 transition-colors"
@@ -116,7 +116,7 @@ function SessionRow({ session }: { session: SessionData }) {
           <p className="font-medium text-foreground truncate">
             {session.exercises?.map(e => e.replace('_', ' ')).join(', ') || 'Session'}
           </p>
-          <p className="text-sm text-gray-500">
+          <p className="text-sm text-foreground/30">
             {new Date(session.date).toLocaleDateString('en-US', {
               month: 'short', day: 'numeric', year: 'numeric',
               hour: '2-digit', minute: '2-digit',
@@ -125,14 +125,14 @@ function SessionRow({ session }: { session: SessionData }) {
         </div>
         <div className="text-right shrink-0 hidden sm:block">
           <p className="font-semibold text-foreground">{session.score} pts</p>
-          <p className="text-sm text-gray-500">{session.duration_minutes} min</p>
+          <p className="text-sm text-foreground/30">{session.duration_minutes} min</p>
         </div>
         <span className={`text-xs px-2.5 py-1 rounded-full border capitalize shrink-0 ${statusColor}`}>
           {session.status}
         </span>
         {expanded
-          ? <ChevronUp className="w-4 h-4 text-gray-500 shrink-0" />
-          : <ChevronDown className="w-4 h-4 text-gray-500 shrink-0" />
+          ? <ChevronUp className="w-4 h-4 text-foreground/30 shrink-0" />
+          : <ChevronDown className="w-4 h-4 text-foreground/30 shrink-0" />
         }
       </button>
 
@@ -140,27 +140,27 @@ function SessionRow({ session }: { session: SessionData }) {
         <div className="px-5 pb-4 pt-0 border-t border-white/5">
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-3">
             <div>
-              <p className="text-xs text-gray-500">Duration</p>
+              <p className="text-xs text-foreground/30">Duration</p>
               <p className="text-sm font-medium text-foreground">{session.duration_minutes} min</p>
             </div>
             <div>
-              <p className="text-xs text-gray-500">Score</p>
+              <p className="text-xs text-foreground/30">Score</p>
               <p className="text-sm font-medium text-blue-400">{session.score}</p>
             </div>
             <div>
-              <p className="text-xs text-gray-500">Avg Match</p>
+              <p className="text-xs text-foreground/30">Avg Match</p>
               <p className="text-sm font-medium text-purple-400">{session.avg_match}%</p>
             </div>
             <div>
-              <p className="text-xs text-gray-500">Difficulty</p>
+              <p className="text-xs text-foreground/30">Difficulty</p>
               <p className="text-sm font-medium text-yellow-400 capitalize">{session.difficulty || '—'}</p>
             </div>
           </div>
           <div className="mt-3">
-            <p className="text-xs text-gray-500 mb-1">Exercises</p>
+            <p className="text-xs text-foreground/30 mb-1">Exercises</p>
             <div className="flex gap-2 flex-wrap">
               {session.exercises?.map(ex => (
-                <span key={ex} className="text-xs bg-white/5 border border-white/10 px-2.5 py-1 rounded-lg text-gray-300 capitalize">
+                <span key={ex} className="text-xs bg-white/5 border border-white/10 px-2.5 py-1 rounded-lg text-foreground/50 capitalize">
                   {ex.replace('_', ' ')}
                 </span>
               ))}
@@ -168,8 +168,8 @@ function SessionRow({ session }: { session: SessionData }) {
           </div>
           {session.affected_hand && (
             <div className="mt-2">
-              <p className="text-xs text-gray-500">Affected Hand</p>
-              <p className="text-sm font-medium text-gray-300 capitalize">{session.affected_hand}</p>
+              <p className="text-xs text-foreground/30">Affected Hand</p>
+              <p className="text-sm font-medium text-foreground/60 capitalize">{session.affected_hand}</p>
             </div>
           )}
         </div>
@@ -251,7 +251,7 @@ export default function Dashboard() {
             <Activity className="w-10 h-10 text-blue-400" />
           </div>
           <h1 className="text-3xl font-bold text-gradient mb-3">No Sessions Yet</h1>
-          <p className="text-gray-400 mb-8">
+          <p className="text-foreground/40 mb-8">
             Complete your first rehabilitation session to start tracking your progress.
           </p>
           <a
@@ -279,11 +279,20 @@ export default function Dashboard() {
   const avgScoreLine = totalSessions > 0 ? totalScore / totalSessions : 0
 
   return (
-    <div className="min-h-screen bg-background text-foreground px-4 py-20">
-      <div className="max-w-6xl mx-auto space-y-8">
+    <div className="min-h-screen bg-background text-foreground px-4 py-20 relative overflow-hidden">
+      <div className="ambient-glow w-[600px] h-[600px] bg-indigo-600/8 -top-40 -right-40" />
+      <div className="ambient-glow w-[500px] h-[500px] bg-purple-600/6 bottom-20 -left-40" style={{ animationDelay: '3s' }} />
+
+      <div className="relative z-10 max-w-6xl mx-auto space-y-8">
         <div>
-          <h1 className="text-4xl font-bold text-gradient mb-2">Dashboard</h1>
-          <p className="text-gray-400">Track your rehabilitation progress</p>
+          <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full border border-indigo-500/20 bg-indigo-500/5 text-sm text-indigo-300/80 mb-4">
+            <span className="relative flex h-2 w-2"><span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-indigo-400 opacity-75" /><span className="relative inline-flex rounded-full h-2 w-2 bg-indigo-500" /></span>
+            Rehab Progress
+          </div>
+          <h1 className="text-4xl font-bold mb-2" style={{ fontFamily: 'var(--font-heading)', letterSpacing: '-0.03em' }}>
+            <span className="text-foreground">Your </span><span className="text-gradient-brand">Dashboard</span>
+          </h1>
+          <p className="text-foreground/40">Track your rehabilitation progress across sessions</p>
         </div>
 
         {/* Stats Row */}
@@ -297,7 +306,7 @@ export default function Dashboard() {
         {/* Charts */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           {/* Score Line Chart */}
-          <div className="liquid-glass rounded-2xl p-6">
+          <div className="liquid-glass rounded-2xl p-6 border border-white/6">
             <h2 className="text-lg font-semibold mb-4 flex items-center gap-2">
               <TrendingUp className="w-5 h-5 text-blue-400" /> Score Over Sessions
             </h2>
@@ -338,7 +347,7 @@ export default function Dashboard() {
           </div>
 
           {/* Match Bar Chart */}
-          <div className="liquid-glass rounded-2xl p-6">
+          <div className="liquid-glass rounded-2xl p-6 border border-white/6">
             <h2 className="text-lg font-semibold mb-4 flex items-center gap-2">
               <Activity className="w-5 h-5 text-purple-400" /> Match % Per Session
             </h2>
@@ -391,7 +400,7 @@ export default function Dashboard() {
 
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
               {/* 3D Brain View */}
-              <div className="liquid-glass rounded-2xl p-5 space-y-4">
+              <div className="liquid-glass rounded-2xl p-5 space-y-4 border border-white/[0.06]">
                 <div className="flex items-center justify-between">
                   <div>
                     <h3 className="text-sm font-semibold text-foreground flex items-center gap-2">
@@ -474,7 +483,7 @@ export default function Dashboard() {
         )}
 
         {!scanLoading && !scanAnalysis && (
-          <div className="liquid-glass rounded-2xl p-6 text-center">
+          <div className="liquid-glass rounded-2xl p-6 text-center border border-white/[0.06]">
             <Brain className="w-10 h-10 text-foreground/10 mx-auto mb-3" />
             <p className="text-foreground/40 text-sm mb-1">No brain scan analysis available</p>
             <p className="text-foreground/25 text-xs mb-4">Upload a brain scan to see stroke effects and neuroplasticity guidance</p>

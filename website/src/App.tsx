@@ -8,6 +8,7 @@ import Stats from './components/Stats'
 import TechStack from './components/TechStack'
 import CTA from './components/CTA'
 import Footer from './components/Footer'
+import ScrollProgress from './components/ScrollProgress'
 import ScanUpload from './pages/ScanUpload'
 import Session from './pages/Session'
 import Dashboard from './pages/Dashboard'
@@ -16,6 +17,7 @@ import BrainVisualization from './pages/BrainVisualization'
 function LandingPage() {
   return (
     <>
+      <ScrollProgress />
       <Hero />
       <Problem />
       <HowItWorks />
@@ -31,8 +33,11 @@ function LandingPage() {
 function PageShell() {
   return (
     <>
+      <ScrollProgress />
       <Navbar />
-      <Outlet />
+      <div className="page-enter">
+        <Outlet />
+      </div>
     </>
   )
 }

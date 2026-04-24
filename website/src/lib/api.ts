@@ -80,7 +80,7 @@ export async function getPatient() {
   return res.json()
 }
 
-export async function updatePatient(profile: any) {
+export async function updatePatient(profile: Record<string, unknown>) {
   const res = await fetch(apiUrl('/api/patient'), {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },

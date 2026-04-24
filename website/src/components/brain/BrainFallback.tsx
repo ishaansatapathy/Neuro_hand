@@ -1,3 +1,4 @@
+/* eslint-disable react-hooks/purity -- point cloud uses Monte Carlo sampling */
 import { useMemo, useRef } from 'react'
 import { useFrame } from '@react-three/fiber'
 import { Html } from '@react-three/drei'

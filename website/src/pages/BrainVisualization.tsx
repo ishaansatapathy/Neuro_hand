@@ -55,28 +55,32 @@ export default function BrainVisualization() {
   const [loading, setLoading] = useState(true)
   const [fetchError, setFetchError] = useState(false)
 
-  const fetchAnalysis = useCallback(() => {
-    setLoading(true)
-    setFetchError(false)
-    getLatestScanAnalysis()
-      .then(data => {
-        if (data.has_scan && data.stroke_analysis) {
-          setAnalysis(data.stroke_analysis)
-          const st: string = data.stroke_analysis.stroke_type ?? ''
-          if (st.includes('Hemorrhagic')) setLesionSide('right')
-          else if (st.includes('Ischemic')) setLesionSide('left')
-          else if ((data.stroke_analysis.affected_zones?.length ?? 0) > 0) setLesionSide('left')
-          resetBrain()
-        } else {
-          setAnalysis(null)
-          resetBrain()
-        }
-      })
-      .catch(() => setFetchError(true))
-      .finally(() => setLoading(false))
+  const loadAnalysis = useCallback(async (withSpinner?: boolean) => {
+    if (withSpinner) setLoading(true)
+    try {
+      const data = await getLatestScanAnalysis()
+      setFetchError(false)
+      if (data.has_scan && data.stroke_analysis) {
+        setAnalysis(data.stroke_analysis)
+        const st: string = data.stroke_analysis.stroke_type ?? ''
+        if (st.includes('Hemorrhagic')) setLesionSide('right')
+        else if (st.includes('Ischemic')) setLesionSide('left')
+        else if ((data.stroke_analysis.affected_zones?.length ?? 0) > 0) setLesionSide('left')
+        resetBrain()
+      } else {
+        setAnalysis(null)
+        resetBrain()
+      }
+    } catch {
+      setFetchError(true)
+    } finally {
+      setLoading(false)
+    }
   }, [])
 
-  useEffect(() => { fetchAnalysis() }, [fetchAnalysis])
+  useEffect(() => {
+    void loadAnalysis()
+  }, [loadAnalysis])
 
   useEffect(() => () => resetBrain(), [])
 
@@ -84,18 +88,22 @@ export default function BrainVisualization() {
   const hasStroke = analysis && analysis.stroke_type !== 'None' && zones.length > 0
 
   return (
-    <div className="min-h-screen bg-background pb-24 pt-8">
-      <div className="mx-auto max-w-5xl px-6 md:px-8">
+    <div className="min-h-screen bg-background pb-24 pt-8 relative overflow-hidden">
+      <div className="ambient-glow w-[600px] h-[600px] bg-red-600/6 -top-40 -right-40" />
+      <div className="ambient-glow w-[400px] h-[400px] bg-purple-600/6 bottom-20 -left-32" style={{ animationDelay: '3s' }} />
+      <div className="relative z-10 mx-auto max-w-5xl px-6 md:px-8">
         <header className="mb-8 space-y-2">
-          <p className="text-xs font-medium uppercase tracking-[0.2em] text-foreground/45">
-            Patient scan analysis
-          </p>
+          <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full border border-red-500/20 bg-red-500/5 text-sm text-red-300/80 mb-3">
+            <span className="relative flex h-2 w-2"><span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75" /><span className="relative inline-flex rounded-full h-2 w-2 bg-red-500" /></span>
+            Patient Scan Analysis
+          </div>
           <div className="flex items-start justify-between gap-4">
-            <h1 className="font-heading text-3xl font-semibold tracking-tight text-foreground md:text-4xl">
-              3D Brain — Stroke Effect Zones
+            <h1 className="text-3xl font-bold tracking-tight text-foreground md:text-4xl" style={{ fontFamily: 'var(--font-heading)', letterSpacing: '-0.03em' }}>
+              <span className="text-foreground">3D Brain — </span><span className="text-gradient-brand">Stroke Effect Zones</span>
             </h1>
             <button
-              onClick={fetchAnalysis}
+              type="button"
+              onClick={() => void loadAnalysis(true)}
               disabled={loading}
               className="shrink-0 mt-1 flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border border-white/10 bg-white/5 hover:bg-white/10 text-foreground/60 transition-colors disabled:opacity-40"
             >
@@ -118,7 +126,7 @@ export default function BrainVisualization() {
         </header>
 
         {/* 3D Brain + Controls */}
-        <section className="liquid-glass flex flex-col gap-4 rounded-2xl border border-white/6 p-5 md:p-6">
+        <section className="liquid-glass flex flex-col gap-4 rounded-3xl border border-white/8 p-5 md:p-6">
           <p className="text-[11px] text-foreground/45">
             Arrows = educational mapping only. Pink highlight removed — use hemisphere toggle below if needed.
           </p>

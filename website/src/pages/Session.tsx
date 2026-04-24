@@ -26,6 +26,12 @@ interface SessionResult {
 
 const DURATIONS = [3, 5, 10]
 
+const INTERVAL_MS: Record<Difficulty, number> = {
+  easy: 8000,
+  medium: 5000,
+  hard: 3000,
+}
+
 // SVG templates (3 primitives) — all 25 gestures map via SKELETON_TEMPLATE
 const HAND_POSES: Record<'open_hand' | 'fist' | 'point', { fingers: [number, number][][]; wrist: [number, number]; palm: [number, number] }> = {
   open_hand: {
@@ -255,6 +261,17 @@ export default function Session() {
   const canvasRef = useRef<HTMLCanvasElement | null>(null)
   const mediaStreamRef = useRef<MediaStream | null>(null)
 
+  const sessionSnapshotRef = useRef({
+    sessionId: null as string | null,
+    score: 0,
+    timeLeft: 0,
+    totalTime: 0,
+    difficulty: 'medium' as Difficulty,
+  })
+  useEffect(() => {
+    sessionSnapshotRef.current = { sessionId, score, timeLeft, totalTime, difficulty }
+  }, [sessionId, score, timeLeft, totalTime, difficulty])
+
   const poseVerify = useHandPoseVerification(
     videoRef,
     canvasRef,
@@ -283,9 +300,12 @@ export default function Session() {
       navigate('/scan', { replace: true })
       return
     }
-    setSessionPhase('analyzing')
-    const t = setTimeout(() => setSessionPhase('setup'), 2600)
-    return () => clearTimeout(t)
+    const toAnalyzing = window.setTimeout(() => setSessionPhase('analyzing'), 0)
+    const toSetup = window.setTimeout(() => setSessionPhase('setup'), 2600)
+    return () => {
+      window.clearTimeout(toAnalyzing)
+      window.clearTimeout(toSetup)
+    }
   }, [navigate])
 
   useEffect(() => {
@@ -367,12 +387,6 @@ export default function Session() {
       .catch(() => {})
   }, [])
 
-  const intervalForDifficulty: Record<Difficulty, number> = {
-    easy: 8000,
-    medium: 5000,
-    hard: 3000,
-  }
-
   const toggleExercise = (ex: Gesture) => {
     setExercises(prev =>
       prev.includes(ex) ? prev.filter(e => e !== ex) : [...prev, ex]
@@ -448,6 +462,44 @@ export default function Session() {
     setLoading(false)
   }
 
+  const handleEnd = useCallback(async () => {
+    if (timerRef.current) {
+      clearInterval(timerRef.current)
+      timerRef.current = null
+    }
+    if (gestureTimerRef.current) {
+      clearInterval(gestureTimerRef.current)
+      gestureTimerRef.current = null
+    }
+    if (audioRef.current) audioRef.current.pause()
+
+    const { sessionId: sid, score: sc, timeLeft: tl, totalTime: tt, difficulty: diff } =
+      sessionSnapshotRef.current
+
+    try {
+      if (sid && sid !== 'local') {
+        await endSession(sid)
+      }
+    } catch {
+      // continue to results
+    }
+
+    const elapsed = Math.max(0, tt - tl)
+    const intervalSec = INTERVAL_MS[diff] / 1000
+    setResult({
+      total_score: sc,
+      duration: elapsed,
+      avg_match:
+        sc > 0
+          ? Math.min(
+              Math.round((sc / Math.max(1, Math.floor(elapsed / intervalSec))) * 100),
+              100,
+            )
+          : 0,
+    })
+    setSessionPhase('complete')
+  }, [])
+
   // Countdown timer
   useEffect(() => {
     if (sessionPhase !== 'active') return
@@ -455,7 +507,7 @@ export default function Session() {
     timerRef.current = setInterval(() => {
       setTimeLeft(prev => {
         if (prev <= 1) {
-          handleEnd()
+          void handleEnd()
           return 0
         }
         return prev - 1
@@ -465,39 +517,18 @@ export default function Session() {
     return () => {
       if (timerRef.current) clearInterval(timerRef.current)
     }
-  }, [sessionPhase])
+  }, [sessionPhase, handleEnd])
 
   // Gesture cycling
   useEffect(() => {
     if (sessionPhase !== 'active') return
 
-    gestureTimerRef.current = setInterval(cycleGesture, intervalForDifficulty[difficulty])
+    gestureTimerRef.current = setInterval(cycleGesture, INTERVAL_MS[difficulty])
 
     return () => {
       if (gestureTimerRef.current) clearInterval(gestureTimerRef.current)
     }
   }, [sessionPhase, cycleGesture, difficulty])
-
-  const handleEnd = async () => {
-    if (timerRef.current) clearInterval(timerRef.current)
-    if (gestureTimerRef.current) clearInterval(gestureTimerRef.current)
-    if (audioRef.current) audioRef.current.pause()
-
-    try {
-      if (sessionId && sessionId !== 'local') {
-        await endSession(sessionId)
-      }
-    } catch {
-      // continue to results
-    }
-
-    setResult({
-      total_score: score,
-      duration: totalTime - timeLeft,
-      avg_match: score > 0 ? Math.min(Math.round((score / Math.max(1, Math.floor((totalTime - timeLeft) / (intervalForDifficulty[difficulty] / 1000)))) * 100), 100) : 0,
-    })
-    setSessionPhase('complete')
-  }
 
   const handleReset = () => {
     setSessionPhase('setup')
@@ -548,11 +579,19 @@ export default function Session() {
   // ─── Setup ─────────────────────────────────────────
   if (sessionPhase === 'setup') {
     return (
-      <div className="min-h-screen bg-background text-foreground px-4 py-20">
-        <div className="max-w-2xl mx-auto space-y-8">
+      <div className="min-h-screen bg-background text-foreground px-4 py-20 relative overflow-hidden">
+        <div className="ambient-glow w-[500px] h-[500px] bg-violet-600/8 -top-32 -right-32" />
+        <div className="ambient-glow w-[400px] h-[400px] bg-blue-600/6 bottom-20 -left-32" style={{ animationDelay: '3s' }} />
+        <div className="relative z-10 max-w-2xl mx-auto space-y-8">
           <div className="text-center">
-            <h1 className="text-4xl font-bold text-gradient mb-2">New Session</h1>
-            <p className="text-gray-400">Configure your rehabilitation — based on your latest scan</p>
+            <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full border border-violet-500/20 bg-violet-500/5 text-sm text-violet-300/80 mb-4">
+              <span className="relative flex h-2 w-2"><span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-violet-400 opacity-75" /><span className="relative inline-flex rounded-full h-2 w-2 bg-violet-500" /></span>
+              Rehab Configuration
+            </div>
+            <h1 className="text-4xl font-bold mb-2" style={{ fontFamily: 'var(--font-heading)', letterSpacing: '-0.03em' }}>
+              <span className="text-foreground">New </span><span className="text-gradient-brand">Session</span>
+            </h1>
+            <p className="text-foreground/40">Configure your rehabilitation — based on your latest scan</p>
           </div>
 
           {/* MRI → distinct pose plan (for demo / judges) */}
@@ -605,7 +644,7 @@ export default function Session() {
                   className={`flex-1 py-3 rounded-xl font-medium transition-all duration-300 ${
                     hand === h
                       ? 'bg-blue-600/30 border border-blue-500/50 text-blue-300'
-                      : 'bg-white/5 border border-white/10 text-gray-400 hover:bg-white/10'
+                      : 'bg-white/5 border border-white/10 text-foreground/40 hover:bg-white/10'
                   }`}
                 >
                   <Hand className={`w-5 h-5 mx-auto mb-1 ${h === 'left' ? 'scale-x-[-1]' : ''}`} />
@@ -656,7 +695,7 @@ export default function Session() {
                     className={`p-3 rounded-xl text-center transition-all duration-300 ${
                       exercises.includes(ex.id)
                         ? 'bg-purple-600/25 border border-purple-500/50 text-purple-300'
-                        : 'bg-white/5 border border-white/10 text-gray-400 hover:bg-white/10'
+                        : 'bg-white/5 border border-white/10 text-foreground/40 hover:bg-white/10'
                     }`}
                   >
                     <span className="text-xl block mb-0.5">{ex.icon}</span>
@@ -682,7 +721,7 @@ export default function Session() {
                       ? d === 'easy' ? 'bg-green-600/25 border border-green-500/50 text-green-300'
                         : d === 'medium' ? 'bg-yellow-600/25 border border-yellow-500/50 text-yellow-300'
                         : 'bg-red-600/25 border border-red-500/50 text-red-300'
-                      : 'bg-white/5 border border-white/10 text-gray-400 hover:bg-white/10'
+                      : 'bg-white/5 border border-white/10 text-foreground/40 hover:bg-white/10'
                   }`}
                 >
                   {d}
@@ -692,7 +731,7 @@ export default function Session() {
           </div>
 
           {/* Duration */}
-          <div className="liquid-glass rounded-2xl p-6">
+          <div className="liquid-glass rounded-2xl p-6 border border-white/[0.06]">
             <h2 className="text-lg font-semibold mb-4 flex items-center gap-2">
               <Clock className="w-5 h-5 text-cyan-400" /> Duration
             </h2>
@@ -704,7 +743,7 @@ export default function Session() {
                   className={`flex-1 py-3 rounded-xl font-medium transition-all duration-300 ${
                     duration === d
                       ? 'bg-cyan-600/25 border border-cyan-500/50 text-cyan-300'
-                      : 'bg-white/5 border border-white/10 text-gray-400 hover:bg-white/10'
+                      : 'bg-white/5 border border-white/10 text-foreground/40 hover:bg-white/10'
                   }`}
                 >
                   {d} min
@@ -717,8 +756,10 @@ export default function Session() {
           <button
             onClick={handleStart}
             disabled={exercises.length === 0 || loading}
-            className="w-full py-4 rounded-2xl font-bold text-lg transition-all duration-300 gradient-border bg-blue-600/20 hover:bg-blue-600/30 text-foreground disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center gap-3"
+            className="group w-full py-4 rounded-2xl font-bold text-lg transition-all duration-300 text-white disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center gap-3 relative overflow-hidden hover:-translate-y-0.5 hover:shadow-[0_8px_40px_rgba(139,92,246,0.3)]"
+            style={{ background: 'linear-gradient(135deg, #6366f1, #8b5cf6, #a855f7)' }}
           >
+            <div className="absolute inset-0 bg-gradient-to-r from-white/0 via-white/20 to-white/0 -translate-x-full group-hover:translate-x-full transition-transform duration-700" />
             {loading ? (
               <div className="w-6 h-6 border-2 border-white/30 border-t-white rounded-full animate-spin" />
             ) : (
@@ -735,11 +776,13 @@ export default function Session() {
   // ─── Active ────────────────────────────────────────
   if (sessionPhase === 'active') {
     return (
-      <div className="min-h-screen bg-background text-foreground px-4 py-12 flex flex-col items-center">
-        <div className="max-w-5xl w-full space-y-6">
+      <div className="min-h-screen bg-background text-foreground px-4 py-12 flex flex-col items-center relative overflow-hidden">
+        <div className="ambient-glow w-[500px] h-[500px] bg-purple-600/6 -top-32 -right-32" />
+        <div className="ambient-glow w-[400px] h-[400px] bg-blue-600/5 bottom-20 -left-32" style={{ animationDelay: '3s' }} />
+        <div className="relative z-10 max-w-5xl w-full space-y-6">
           {/* Target gesture label */}
           <div className="text-center">
-            <p className="text-sm text-gray-400 uppercase tracking-widest mb-1">Target Gesture</p>
+            <p className="text-xs text-foreground/30 uppercase tracking-[0.2em] font-bold mb-2">Target Gesture</p>
             <h2 className="text-3xl font-bold text-gradient-brand capitalize">
               {currentGesture.replace('_', ' ')}
             </h2>
@@ -763,7 +806,7 @@ export default function Session() {
                         alt={`Reference: ${currentGesture}`}
                         className="w-full h-auto max-h-44 object-contain rounded-lg"
                       />
-                      <p className="text-center text-[10px] text-gray-500 mt-1 uppercase tracking-wider">Reference photo</p>
+                      <p className="text-center text-[10px] text-foreground/25 mt-1 uppercase tracking-wider">Reference photo</p>
                     </div>
                   )}
                   <div className="flex items-center justify-center min-w-0 flex-1">
@@ -833,7 +876,7 @@ export default function Session() {
                       </div>
                     </div>
                   </div>
-                  <p className="text-[10px] text-center text-gray-500 py-2 px-2 border-t border-white/5">
+                  <p className="text-[10px] text-center text-foreground/25 py-2 px-2 border-t border-white/5">
                     {ARM_EXERCISE_IDS.includes(currentGesture)
                       ? 'Mirror view — cyan lines: shoulders & arms; blue/pink: hand. Match the target.'
                       : 'Mirror view — skeleton overlay tracks your hand; match the target'}
@@ -885,8 +928,8 @@ export default function Session() {
           <div className="flex items-center justify-between gap-4">
             <CircularTimer remaining={timeLeft} total={totalTime} />
 
-            <div className="liquid-glass rounded-2xl px-6 py-4 text-center flex-1">
-              <p className="text-sm text-gray-400 mb-1">Score</p>
+            <div className="liquid-glass rounded-2xl px-6 py-4 text-center flex-1 border border-white/[0.06]">
+              <p className="text-xs text-foreground/30 uppercase tracking-[0.15em] font-bold mb-1">Score</p>
               <p className="text-4xl font-bold text-gradient-brand tabular-nums">{score}</p>
             </div>
           </div>
@@ -913,29 +956,33 @@ export default function Session() {
 
   // ─── Complete ──────────────────────────────────────
   return (
-    <div className="min-h-screen bg-background text-foreground px-4 py-20 flex items-center justify-center">
-      <div className="max-w-md w-full space-y-8 text-center">
+    <div className="min-h-screen bg-background text-foreground px-4 py-20 flex items-center justify-center relative overflow-hidden">
+      <div className="ambient-glow w-[500px] h-[500px] bg-emerald-600/8 top-[30%] left-[20%]" />
+      <div className="ambient-glow w-[400px] h-[400px] bg-purple-600/6 bottom-[20%] right-[20%]" style={{ animationDelay: '3s' }} />
+      <div className="relative z-10 max-w-md w-full space-y-8 text-center">
         <div>
-          <div className="w-20 h-20 mx-auto rounded-full bg-green-600/20 border border-green-500/30 flex items-center justify-center mb-4">
-            <Trophy className="w-10 h-10 text-green-400" />
+          <div className="w-20 h-20 mx-auto rounded-full bg-gradient-to-br from-emerald-500/20 to-green-500/15 border border-emerald-500/30 flex items-center justify-center mb-5 animate-float">
+            <Trophy className="w-10 h-10 text-emerald-400" />
           </div>
-          <h1 className="text-3xl font-bold text-gradient mb-2">Session Complete!</h1>
-          <p className="text-gray-400">Great work on your rehabilitation</p>
+          <h1 className="text-3xl font-bold mb-2" style={{ fontFamily: 'var(--font-heading)', letterSpacing: '-0.03em' }}>
+            <span className="text-foreground">Session </span><span className="text-gradient-brand">Complete!</span>
+          </h1>
+          <p className="text-foreground/40">Great work on your rehabilitation</p>
         </div>
 
         <div className="grid grid-cols-3 gap-4">
-          <div className="liquid-glass rounded-2xl p-4">
-            <p className="text-sm text-gray-400 mb-1">Score</p>
+          <div className="liquid-glass rounded-2xl p-5 border border-white/[0.06]">
+            <p className="text-xs text-foreground/30 uppercase tracking-wider font-bold mb-1">Score</p>
             <p className="text-2xl font-bold text-blue-400">{result?.total_score ?? 0}</p>
           </div>
-          <div className="liquid-glass rounded-2xl p-4">
-            <p className="text-sm text-gray-400 mb-1">Duration</p>
+          <div className="liquid-glass rounded-2xl p-5 border border-white/[0.06]">
+            <p className="text-xs text-foreground/30 uppercase tracking-wider font-bold mb-1">Duration</p>
             <p className="text-2xl font-bold text-purple-400">
               {result ? `${Math.floor(result.duration / 60)}:${(result.duration % 60).toString().padStart(2, '0')}` : '0:00'}
             </p>
           </div>
-          <div className="liquid-glass rounded-2xl p-4">
-            <p className="text-sm text-gray-400 mb-1">Avg Match</p>
+          <div className="liquid-glass rounded-2xl p-5 border border-white/[0.06]">
+            <p className="text-xs text-foreground/30 uppercase tracking-wider font-bold mb-1">Avg Match</p>
             <p className="text-2xl font-bold text-pink-400">{result?.avg_match ?? 0}%</p>
           </div>
         </div>
@@ -949,7 +996,7 @@ export default function Session() {
           </a>
           <button
             onClick={handleReset}
-            className="flex-1 py-3 rounded-xl bg-white/5 border border-white/10 text-gray-300 hover:bg-white/10 transition-all flex items-center justify-center gap-2 font-medium"
+            className="flex-1 py-3 rounded-xl bg-white/5 border border-white/10 text-foreground/50 hover:bg-white/10 transition-all flex items-center justify-center gap-2 font-medium"
           >
             <RotateCcw className="w-4 h-4" /> New Session
           </button>

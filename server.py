@@ -244,7 +244,13 @@ def _classify_scan(image_path: str) -> dict[str, Any]:
         extra = " No model checkpoint found — using random dummy classifier."
         result["warning"] = (base_w + extra).strip()
 
-    result["stroke_analysis"] = _build_stroke_analysis(legacy, conf)
+    # Real CV-based analysis (reads actual scan pixels) → fallback to hardcoded
+    try:
+        from brain_scan_analyzer import analyze_brain_scan
+        result["stroke_analysis"] = analyze_brain_scan(image_path, legacy, conf)
+    except Exception as e:
+        print(f"[server] CV analyzer failed ({e}), using rule-based fallback")
+        result["stroke_analysis"] = _build_stroke_analysis(legacy, conf)
 
     return result
 

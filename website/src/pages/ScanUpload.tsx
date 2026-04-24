@@ -14,6 +14,14 @@ import {
 } from 'lucide-react'
 import { uploadScan, getScans } from '../lib/api'
 import { saveScanForSession } from '../lib/sessionGate'
+import {
+  Radar,
+  RadarChart,
+  PolarGrid,
+  PolarAngleAxis,
+  PolarRadiusAxis,
+  ResponsiveContainer,
+} from 'recharts'
 
 interface StrokeZone {
   zone: string
@@ -22,12 +30,23 @@ interface StrokeZone {
   effects: string[]
 }
 
+interface ScanMetrics {
+  lesion_coverage_pct: number
+  hemisphere_asymmetry: number
+  affected_side: string
+  mean_intensity: number
+  intensity_std: number
+  zones_affected: number
+  avg_severity: number
+}
+
 interface StrokeAnalysisData {
   stroke_type: string
   description: string
   affected_zones: StrokeZone[]
   neuroplasticity_targets: string[]
   recovery_potential: string
+  scan_metrics?: ScanMetrics
 }
 
 interface ClassificationPayload {
@@ -209,25 +228,27 @@ export default function ScanUpload() {
 
   return (
     <div className="min-h-screen bg-background relative overflow-hidden">
-      <div className="glow-blob w-[500px] h-[500px] bg-blue-500/30 -top-48 -left-48 fixed" />
-      <div className="glow-blob w-[400px] h-[400px] bg-purple-500/20 -bottom-32 -right-32 fixed" />
+      <div className="ambient-glow w-[600px] h-[600px] bg-blue-600/10 -top-48 -left-48" />
+      <div className="ambient-glow w-[500px] h-[500px] bg-purple-600/8 -bottom-32 -right-32" style={{ animationDelay: '3s' }} />
+      <div className="ambient-glow w-[400px] h-[400px] bg-pink-600/6 top-[40%] right-[5%]" style={{ animationDelay: '5s' }} />
 
       <div className="relative z-10 max-w-4xl mx-auto px-4 sm:px-6 py-12 sm:py-20">
-        <div className="text-center mb-12">
-          <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full liquid-glass text-sm text-foreground/70 mb-6">
+        <div className="text-center mb-14">
+          <div className="inline-flex items-center gap-2 px-5 py-2 rounded-full border border-blue-500/20 bg-blue-500/5 text-sm text-blue-300/80 mb-8">
+            <span className="relative flex h-2 w-2"><span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-blue-400 opacity-75" /><span className="relative inline-flex rounded-full h-2 w-2 bg-blue-500" /></span>
             <Brain className="w-4 h-4 text-blue-400" />
             AI-Powered Brain Scan Analysis
           </div>
-          <h1 className="text-4xl sm:text-5xl font-bold text-gradient mb-4">
-            Upload Brain Scan
+          <h1 className="text-4xl sm:text-5xl font-bold mb-5" style={{ fontFamily: 'var(--font-heading)', letterSpacing: '-0.03em' }}>
+            <span className="text-foreground">Upload </span><span className="text-gradient-brand">Brain Scan</span>
           </h1>
-          <p className="text-foreground/50 text-lg max-w-xl mx-auto">
+          <p className="text-foreground/45 text-lg max-w-xl mx-auto leading-relaxed">
             Upload an MRI scan for instant AI classification. Our model detects stroke patterns
             with high accuracy to guide your rehabilitation.
           </p>
         </div>
 
-        <div className="liquid-glass card-spotlight rounded-2xl p-6 sm:p-8 mb-8">
+        <div className="liquid-glass card-spotlight rounded-3xl p-6 sm:p-8 mb-8 border border-white/8">
           {!result ? (
             <>
               <div
@@ -286,11 +307,10 @@ export default function ScanUpload() {
                           handleUpload()
                         }}
                         disabled={uploading}
-                        className="mt-4 inline-flex items-center gap-2 px-6 py-3 rounded-xl font-semibold text-foreground transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
-                        style={{
-                          background: 'linear-gradient(135deg, #60a5fa, #a78bfa, #f472b6)',
-                        }}
+                        className="mt-4 group/btn relative inline-flex items-center gap-2 px-6 py-3 rounded-xl font-semibold text-white transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed hover:-translate-y-0.5 hover:shadow-[0_8px_30px_rgba(139,92,246,0.3)] overflow-hidden"
+                        style={{ background: 'linear-gradient(135deg, #6366f1, #8b5cf6, #a855f7)' }}
                       >
+                        <div className="absolute inset-0 bg-gradient-to-r from-white/0 via-white/20 to-white/0 -translate-x-full group-hover/btn:translate-x-full transition-transform duration-700" />
                         {uploading ? (
                           <>
                             <Loader2 className="w-5 h-5 animate-spin" />
@@ -306,15 +326,18 @@ export default function ScanUpload() {
                     </div>
                   </div>
                 ) : (
-                  <div className="flex flex-col items-center gap-4 cursor-pointer">
-                    <div className="w-16 h-16 rounded-2xl bg-white/5 flex items-center justify-center">
-                      <FileImage className="w-8 h-8 text-foreground/30" />
+                  <div className="flex flex-col items-center gap-5 cursor-pointer">
+                    <div className="relative">
+                      <div className="w-18 h-18 rounded-2xl bg-gradient-to-br from-blue-500/15 to-purple-500/10 border border-white/8 flex items-center justify-center animate-float">
+                        <FileImage className="w-9 h-9 text-blue-400/70" />
+                      </div>
+                      <div className="absolute -inset-2 rounded-3xl bg-blue-500/5 animate-ping opacity-30" style={{ animationDuration: '3s' }} />
                     </div>
                     <div className="text-center">
-                      <p className="text-foreground/70 text-lg font-medium">
+                      <p className="text-foreground/60 text-lg font-medium">
                         Drop your brain scan here or click to browse
                       </p>
-                      <p className="text-foreground/30 text-sm mt-1">
+                      <p className="text-foreground/25 text-sm mt-1.5">
                         Supports JPEG, PNG, DICOM — up to 50 MB
                       </p>
                     </div>
@@ -432,26 +455,212 @@ export default function ScanUpload() {
               </div>
 
               {result.stroke_analysis && result.stroke_analysis.stroke_type !== 'None' && (
-                <div className="space-y-4">
+                <div className="space-y-6">
                   <div className="gradient-divider" />
+
+                  {/* ── Section Header ── */}
                   <div className="p-5 rounded-xl bg-red-500/5 border border-red-500/15">
-                    <h3 className="text-sm font-semibold text-red-400 mb-2 flex items-center gap-2">
-                      <AlertCircle className="w-4 h-4" />
-                      {result.stroke_analysis.stroke_type} — Stroke Analysis
+                    <h3 className="text-base font-bold text-red-400 mb-1.5 flex items-center gap-2">
+                      <AlertCircle className="w-5 h-5" />
+                      {result.stroke_analysis.stroke_type} — Detailed Neuro Analysis
                     </h3>
-                    <p className="text-xs text-foreground/60 leading-relaxed mb-3">
+                    <p className="text-sm text-foreground/60 leading-relaxed">
                       {result.stroke_analysis.description}
                     </p>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                      {result.stroke_analysis.affected_zones.slice(0, 4).map((zone, i) => (
-                        <div key={i} className="flex items-center gap-2 text-xs text-foreground/50">
-                          <div className="w-2 h-2 rounded-full bg-red-400/60 shrink-0" />
-                          <span>{zone.zone}</span>
-                          <span className="ml-auto text-foreground/30">{(zone.severity * 100).toFixed(0)}%</span>
+                  </div>
+
+                  {/* ── Scan Metrics Cards ── */}
+                  {result.stroke_analysis.scan_metrics && (
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                      {[
+                        {
+                          label: 'Lesion Coverage',
+                          value: `${result.stroke_analysis.scan_metrics.lesion_coverage_pct.toFixed(1)}%`,
+                          color: '#f472b6',
+                        },
+                        {
+                          label: 'Asymmetry Index',
+                          value: result.stroke_analysis.scan_metrics.hemisphere_asymmetry.toFixed(3),
+                          color: '#a78bfa',
+                        },
+                        {
+                          label: 'Zones Affected',
+                          value: String(result.stroke_analysis.scan_metrics.zones_affected),
+                          color: '#60a5fa',
+                        },
+                        {
+                          label: 'Avg Severity',
+                          value: `${(result.stroke_analysis.scan_metrics.avg_severity * 100).toFixed(0)}%`,
+                          color: '#fb923c',
+                        },
+                      ].map((stat) => (
+                        <div
+                          key={stat.label}
+                          className="rounded-xl border border-white/8 ' bg-white/[0.02]' p-4 text-center"
+                        >
+                          <p
+                            className="text-2xl font-bold tabular-nums"
+                            style={{ color: stat.color }}
+                          >
+                            {stat.value}
+                          </p>
+                          <p className="text-[10px] uppercase tracking-wider text-foreground/40 mt-1">
+                            {stat.label}
+                          </p>
                         </div>
                       ))}
                     </div>
+                  )}
+
+                  {/* ── Radar Chart + Zone Severity Bars ── */}
+                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+
+                    {/* Radar Chart */}
+                    <div className="rounded-xl border border-white/8 'bg-white/[0.02]' p-5">
+                      <h4 className="text-xs font-semibold uppercase tracking-wider text-foreground/40 mb-4 flex items-center gap-2">
+                        <Activity className="w-3.5 h-3.5" />
+                        Affected Brain Regions
+                      </h4>
+                      <div className="w-full" style={{ height: 260 }}>
+                        <ResponsiveContainer width="100%" height="100%">
+                          <RadarChart
+                            data={result.stroke_analysis.affected_zones.map((z) => ({
+                              zone: z.zone.length > 20 ? z.zone.slice(0, 18) + '…' : z.zone,
+                              severity: Math.round(z.severity * 100),
+                              fullMark: 100,
+                            }))}
+                          >
+                            <PolarGrid stroke="rgba(255,255,255,0.06)" />
+                            <PolarAngleAxis
+                              dataKey="zone"
+                              tick={{ fill: 'rgba(255,255,255,0.45)', fontSize: 10 }}
+                            />
+                            <PolarRadiusAxis
+                              angle={90}
+                              domain={[0, 100]}
+                              tick={{ fill: 'rgba(255,255,255,0.2)', fontSize: 9 }}
+                              axisLine={false}
+                            />
+                            <Radar
+                              name="Severity"
+                              dataKey="severity"
+                              stroke="#f472b6"
+                              fill="url(#radarFill)"
+                              fillOpacity={0.5}
+                              strokeWidth={2}
+                              dot={{ r: 4, fill: '#f472b6', strokeWidth: 0 }}
+                              isAnimationActive={true}
+                              animationDuration={1200}
+                            />
+                            <defs>
+                              <linearGradient id="radarFill" x1="0" y1="0" x2="0" y2="1">
+                                <stop offset="0%" stopColor="#a78bfa" stopOpacity={0.6} />
+                                <stop offset="100%" stopColor="#f472b6" stopOpacity={0.15} />
+                              </linearGradient>
+                            </defs>
+                          </RadarChart>
+                        </ResponsiveContainer>
+                      </div>
+                    </div>
+
+                    {/* Zone-by-zone severity bars with effects */}
+                    <div className="rounded-xl border border-white/8 'bg-white/[0.02]' p-5">
+                      <h4 className="text-xs font-semibold uppercase tracking-wider text-foreground/40 mb-4">
+                        Zone Severity Breakdown
+                      </h4>
+                      <div className="space-y-4">
+                        {result.stroke_analysis.affected_zones.map((zone, i) => {
+                          const pct = Math.round(zone.severity * 100)
+                          const color =
+                            pct >= 80
+                              ? 'linear-gradient(90deg, #ef4444, #f472b6)'
+                              : pct >= 50
+                              ? 'linear-gradient(90deg, #f59e0b, #fb923c)'
+                              : 'linear-gradient(90deg, #60a5fa, #a78bfa)'
+                          return (
+                            <div key={i} className="space-y-1.5">
+                              <div className="flex justify-between items-baseline">
+                                <span className="text-sm text-foreground/80 font-medium leading-tight">
+                                  {zone.zone}
+                                </span>
+                                <span
+                                  className="text-xs font-bold tabular-nums"
+                                  style={{
+                                    color: pct >= 80 ? '#f472b6' : pct >= 50 ? '#fb923c' : '#a78bfa',
+                                  }}
+                                >
+                                  {pct}%
+                                </span>
+                              </div>
+                              <div className="h-2 rounded-full bg-white/5 overflow-hidden">
+                                <div
+                                  className="h-full rounded-full transition-all duration-1000 ease-out"
+                                  style={{ width: `${pct}%`, background: color }}
+                                />
+                              </div>
+                              <div className="flex flex-wrap gap-1.5 mt-1">
+                                {zone.effects.map((eff, j) => (
+                                  <span
+                                    key={j}
+                                    className="text-[10px] px-2 py-0.5 rounded-full bg-white/5 text-foreground/40 border border-white/5"
+                                  >
+                                    {eff}
+                                  </span>
+                                ))}
+                              </div>
+                            </div>
+                          )
+                        })}
+                      </div>
+                    </div>
                   </div>
+
+                  {/* ── Neuroplasticity Targets ── */}
+                  {result.stroke_analysis.neuroplasticity_targets &&
+                    result.stroke_analysis.neuroplasticity_targets.length > 0 && (
+                      <div className="rounded-xl border border-emerald-500/15 'bg-emerald-500/[0.03]' p-5">
+                        <h4 className="text-sm font-semibold text-emerald-400 mb-3 flex items-center gap-2">
+                          <Brain className="w-4 h-4" />
+                          Recommended Neuroplasticity Exercises
+                        </h4>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                          {result.stroke_analysis.neuroplasticity_targets.map(
+                            (target: string, i: number) => (
+                              <div
+                                key={i}
+                                className="flex items-start gap-2.5 p-3 rounded-lg 'bg-white/[0.03]' border border-white/5 hover:border-emerald-500/20 transition-colors"
+                              >
+                                <div className="mt-0.5 w-5 h-5 rounded-md bg-emerald-500/15 flex items-center justify-center shrink-0">
+                                  <CheckCircle2 className="w-3 h-3 text-emerald-400" />
+                                </div>
+                                <span className="text-xs text-foreground/60 leading-relaxed">
+                                  {target}
+                                </span>
+                              </div>
+                            ),
+                          )}
+                        </div>
+                      </div>
+                    )}
+
+                  {/* ── Recovery Potential ── */}
+                  {result.stroke_analysis.recovery_potential && (
+                    <div
+                      className="rounded-xl p-5 border border-blue-500/15"
+                      style={{
+                        background:
+                          'linear-gradient(135deg, rgba(96,165,250,0.06), rgba(167,139,250,0.04), rgba(244,114,182,0.03))',
+                      }}
+                    >
+                      <h4 className="text-sm font-semibold text-blue-400 mb-2 flex items-center gap-2">
+                        <Activity className="w-4 h-4" />
+                        Recovery Potential
+                      </h4>
+                      <p className="text-sm text-foreground/60 leading-relaxed">
+                        {result.stroke_analysis.recovery_potential}
+                      </p>
+                    </div>
+                  )}
                 </div>
               )}
 
@@ -485,8 +694,8 @@ export default function ScanUpload() {
           )}
         </div>
 
-        <div className="liquid-glass card-spotlight rounded-2xl p-6 sm:p-8">
-          <h3 className="text-xl font-bold text-gradient mb-6 flex items-center gap-2">
+        <div className="liquid-glass card-spotlight rounded-3xl p-6 sm:p-8 border border-white/8">
+          <h3 className="text-xl font-bold text-gradient-brand mb-6 flex items-center gap-2">
             <Clock className="w-5 h-5 text-blue-400" />
             Previous Scans
           </h3>

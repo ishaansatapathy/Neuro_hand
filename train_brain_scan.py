@@ -4,6 +4,8 @@
  Post-Stroke Rehabilitation AI System
 
  Usage:  py -3 train_brain_scan.py
+         py -3 train_brain_scan.py --class-mode stroke3
+             # 3-class stroke (Hemorrhagic / Ischemic / Normal); macro-F1 for model selection, 10% test holdout
          py -3 train_brain_scan.py --quick   # ~1 hour (subsample + fewer epochs)
          py -3 train_brain_scan.py --medium  # ~75% of full run — between quick & full (~4–8h CPU typical)
          py -3 train_brain_scan.py --resume models/brain_scan_train_checkpoint.pt
@@ -61,6 +63,8 @@ IMAGE_EXTS = {".jpg", ".jpeg", ".png", ".bmp", ".tif", ".tiff"}
 IMG_SIZE       = 256
 BATCH_SIZE     = 24
 VAL_SPLIT      = 0.15
+# Holdout: ~75% train / 15% val / 10% test (stratified) when test split is enabled.
+TEST_SPLIT     = 0.10
 RANDOM_SEED    = 42
 HEAD_EPOCHS    = 5
 MAX_EPOCHS     = 25
@@ -120,11 +124,12 @@ class ScanDataset(Dataset):
         return self.tf(img), self.label_to_idx[label]
 
 
-def build_classifier_model(arch: str, n_classes: int):
+def build_classifier_model(arch: str, n_classes: int, dropout_p: float | None = None):
     """EfficientNet-B0/B1/B2 with dropout head (must match server load)."""
     import torch
     from torchvision import models
 
+    p = float(CLASSIFIER_DROPOUT if dropout_p is None else dropout_p)
     arch = arch.lower().strip()
     if arch == "efficientnet_b2":
         m = models.efficientnet_b2(weights=models.EfficientNet_B2_Weights.IMAGENET1K_V1)
@@ -134,7 +139,7 @@ def build_classifier_model(arch: str, n_classes: int):
         m = models.efficientnet_b0(weights=models.EfficientNet_B0_Weights.IMAGENET1K_V1)
     in_features = m.classifier[-1].in_features
     m.classifier = torch.nn.Sequential(
-        torch.nn.Dropout(p=CLASSIFIER_DROPOUT, inplace=True),
+        torch.nn.Dropout(p=p, inplace=True),
         torch.nn.Linear(in_features, n_classes),
     )
     return m
@@ -264,6 +269,92 @@ def collect_all_data(data_profile: str = "full") -> list[tuple[Path, str]]:
     return unique
 
 
+# Stroke subtype (API labels must match ml/brain_scan_pipeline and server)
+LABEL_HEM = "Hemorrhagic Stroke"
+LABEL_ISC = "Ischemic Stroke"
+LABEL_NORM = "Normal"
+
+
+def collect_stroke3_data(data_profile: str = "full") -> list[tuple[Path, str]]:
+    """
+    3-class stroke classifier: Hemorrhagic vs Ischemic vs Normal.
+    Excludes 7-disease folders and unlabeled "Stroke" buckets; uses Kaggle-style train/test
+    and dataset/* MRI subfolders with explicit subtype.
+    """
+    samples: list[tuple[Path, str]] = []
+
+    merge = {
+        "Hemorrhage": LABEL_HEM,
+        "Ischemia": LABEL_ISC,
+        "Normal": LABEL_NORM,
+    }
+
+    if data_profile in ("full", "originals_only"):
+        for split_name in ("train", "test"):
+            split_dir = RAW_DIR / split_name
+            if not split_dir.exists():
+                continue
+            for sub, lab in merge.items():
+                found = _scan_folder(split_dir / sub, lab)
+                if found:
+                    log(f"  [{split_name}/{sub}] -> {lab}: {len(found)} images")
+                samples.extend(found)
+        if data_profile == "full":
+            ext = RAW_DIR / "External_test"
+            if ext.exists():
+                for sub in sorted(ext.iterdir()):
+                    if not sub.is_dir():
+                        continue
+                    lab = merge.get(sub.name)
+                    if lab is None:
+                        continue
+                    found = _scan_folder(sub, lab)
+                    if found:
+                        log(f"  [External_test/{sub.name}] -> {lab}: {len(found)} images")
+                    samples.extend(found)
+    else:
+        log("  [data profile] conservative: skipping Kaggle train/test/External_test for stroke-3")
+
+    if data_profile in ("full", "conservative"):
+        mri_map = {
+            "Haemorrhagic": LABEL_HEM,
+            "Hemorrhagic": LABEL_HEM,
+            "Ischemic": LABEL_ISC,
+            "Ischemia": LABEL_ISC,
+            "Normal": LABEL_NORM,
+        }
+        for rel in ("dataset/Dataset_MRI_Folder", "dataset/Stroke_classification"):
+            mri_root = RAW_DIR.joinpath(*rel.split("/"))
+            if not mri_root.is_dir():
+                continue
+            for sub in sorted(mri_root.iterdir()):
+                if not sub.is_dir():
+                    continue
+                lab = mri_map.get(sub.name)
+                if lab is None:
+                    continue
+                found = _scan_folder(sub, lab)
+                if found:
+                    log(f"  [{rel}/{sub.name}] -> {lab}: {len(found)} images")
+                samples.extend(found)
+
+    if data_profile == "originals_only":
+        log("  [data profile] stroke3 originals_only: Kaggle train+test Hemorrhage/Ischemia/Normal only (no 7-class dirs)")
+
+    before = len(samples)
+    seen: set[Path] = set()
+    unique: list[tuple[Path, str]] = []
+    for path, label in samples:
+        rp = path.resolve()
+        if rp in seen:
+            continue
+        seen.add(rp)
+        unique.append((path, label))
+    if before != len(unique):
+        log(f"  [dedupe] removed {before - len(unique)} duplicate paths ({before} -> {len(unique)})")
+    return unique
+
+
 def load_exclude_path_substrings() -> list[str]:
     """Lines from data/brain_scan_exclude_paths.txt matched as substrings on resolved paths."""
     if not EXCLUDE_PATHS_FILE.is_file():
@@ -346,6 +437,40 @@ def stratified_split(
     return train_samples, val_samples
 
 
+def stratified_train_val_test_split(
+    samples: list[tuple[Path, str]],
+    test_ratio: float,
+    val_ratio_of_total: float,
+    seed: int,
+) -> tuple[list[tuple[Path, str]], list[tuple[Path, str]], list[tuple[Path, str]]]:
+    """Stratified split so test is test_ratio of all, val is val_ratio_of_total of all, rest train."""
+    from sklearn.model_selection import train_test_split
+
+    if not samples:
+        return [], [], []
+    idx = list(range(len(samples)))
+    labels = [s[1] for s in samples]
+    train_val_idx, test_idx = train_test_split(
+        idx,
+        test_size=test_ratio,
+        stratify=labels,
+        random_state=seed,
+    )
+    tv_labels = [samples[i][1] for i in train_val_idx]
+    remainder = 1.0 - test_ratio
+    val_in_remainder = val_ratio_of_total / remainder if remainder > 1e-6 else 0.0
+    train_idx, val_idx = train_test_split(
+        train_val_idx,
+        test_size=val_in_remainder,
+        stratify=tv_labels,
+        random_state=seed,
+    )
+    train_samples = [samples[i] for i in train_idx]
+    val_samples = [samples[i] for i in val_idx]
+    test_samples = [samples[i] for i in test_idx]
+    return train_samples, val_samples, test_samples
+
+
 # ---------------------------------------------------------------------------
 # Dataset, transforms, model
 # ---------------------------------------------------------------------------
@@ -355,6 +480,7 @@ def build_all(
     class_to_idx: dict[str, int],
     arch: str = "efficientnet_b1",
     img_size: int | None = None,
+    classifier_dropout: float | None = None,
 ) -> tuple[Any, Any, Any]:
     from torchvision import transforms
 
@@ -398,7 +524,7 @@ def build_all(
     val_ds = ScanDataset(val_samples, val_tf, class_to_idx)
 
     n_classes = len(class_to_idx)
-    model = build_classifier_model(arch, n_classes)
+    model = build_classifier_model(arch, n_classes, dropout_p=classifier_dropout)
 
     return train_ds, val_ds, model
 
@@ -562,7 +688,7 @@ def main() -> None:
     import numpy as np
     from torch import optim
     from torch.utils.data import DataLoader, WeightedRandomSampler
-    from sklearn.metrics import classification_report, confusion_matrix
+    from sklearn.metrics import classification_report, confusion_matrix, f1_score
 
     ap = argparse.ArgumentParser(
         description="Train brain scan classifier (EfficientNet-B0/B1/B2, focal loss, mixup).",
@@ -647,8 +773,29 @@ def main() -> None:
         choices=("full", "conservative", "originals_only"),
         help=(
             "Which folders to merge: full (all sources), conservative (skip train/test/External_test), "
-            "originals_only (only data/raw/<ClassName>/). Ignored when using --resume (checkpoint wins)."
+            "originals_only (only data/raw/<ClassName>/). Ignored when using --resume (checkpoint wins). "
+            "For --class-mode stroke3: conservative = dataset/ MRI only; originals_only = Kaggle train+test, no dataset."
         ),
+    )
+    ap.add_argument(
+        "--class-mode",
+        type=str,
+        default="multiclass",
+        choices=("multiclass", "stroke3"),
+        help="multiclass: 7+ disease + merged Stroke; stroke3: Hemorrhagic vs Ischemic vs Normal (app API labels).",
+    )
+    ap.add_argument(
+        "--val-metric",
+        type=str,
+        default="auto",
+        choices=("auto", "accuracy", "f1_macro"),
+        help="Model selection in fine-tune: auto uses f1_macro for stroke3, accuracy for multiclass.",
+    )
+    ap.add_argument(
+        "--test-holdout",
+        action=argparse.BooleanOptionalAction,
+        default=None,
+        help="Stratified test set (10%%) + 15%% val + train (default: on for stroke3, off for multiclass).",
     )
     ap.add_argument(
         "--no-verify-images",
@@ -714,6 +861,16 @@ def main() -> None:
         data_profile = str(resume_ckpt.get("data_profile", "full")).lower().strip()
         if data_profile not in ("full", "conservative", "originals_only"):
             data_profile = "full"
+        class_mode = str(resume_ckpt.get("class_mode", "multiclass"))
+        if class_mode not in ("multiclass", "stroke3"):
+            class_mode = "multiclass"
+        val_metric_arg = str(resume_ckpt.get("val_metric", "auto"))
+        use_test_holdout = bool(
+            resume_ckpt.get("use_test_holdout", class_mode == "stroke3")
+        )
+        classifier_dropout = float(
+            resume_ckpt.get("classifier_dropout", CLASSIFIER_DROPOUT)
+        )
         log(f"\n  [resume] {resume_path.name}")
         log(f"  [resume] data_profile={data_profile} (from checkpoint)")
         log(
@@ -771,8 +928,27 @@ def main() -> None:
             max_per_class_custom = None
 
         data_profile = str(args.data_profile).lower().strip()
+        class_mode = str(args.class_mode)
+        val_metric_arg = str(args.val_metric)
+        if args.test_holdout is None:
+            use_test_holdout = class_mode == "stroke3"
+        else:
+            use_test_holdout = bool(args.test_holdout)
+        classifier_dropout = 0.28 if class_mode == "stroke3" else CLASSIFIER_DROPOUT
+        if class_mode == "stroke3" and mixup_alpha > 0 and mixup_prob > 0:
+            mixup_prob = min(mixup_prob, 0.42)
+            mixup_alpha = min(mixup_alpha, 0.28)
+
+    if val_metric_arg == "auto":
+        val_metric_effective = "f1_macro" if class_mode == "stroke3" else "accuracy"
+    else:
+        val_metric_effective = val_metric_arg
 
     log(f"\n  Device: {device}")
+    log(
+        f"  class_mode={class_mode} | val_metric={val_metric_effective} | "
+        f"test_holdout={use_test_holdout} | classifier_dropout={classifier_dropout:.2f}"
+    )
     log(f"  DataLoader workers: {nw}  (images decoded in parallel; was 0 on Windows before)")
     if device.type == "cpu":
         log("  Tip: NVIDIA GPU + CUDA build of PyTorch se training 5-20x fast ho sakti hai.")
@@ -793,7 +969,10 @@ def main() -> None:
 
     # -- Collect ALL data ----------------------------------------------------
     log("\n  Collecting images from all sources...")
-    all_samples = collect_all_data(data_profile)
+    if class_mode == "stroke3":
+        all_samples = collect_stroke3_data(data_profile)
+    else:
+        all_samples = collect_all_data(data_profile)
     all_samples = apply_exclude_substrings(all_samples, load_exclude_path_substrings())
     if not args.no_verify_images:
         all_samples = filter_readable_images(all_samples)
@@ -837,8 +1016,18 @@ def main() -> None:
         log(f"    {cls:30s} {cnt[cls]:6d} {bar}")
 
     # -- Stratified split ----------------------------------------------------
-    train_samples, val_samples = stratified_split(all_samples, VAL_SPLIT, RANDOM_SEED)
-    log(f"\n  Stratified split: {len(train_samples)} train / {len(val_samples)} val")
+    test_samples: list[tuple[Path, str]] = []
+    if use_test_holdout:
+        train_samples, val_samples, test_samples = stratified_train_val_test_split(
+            all_samples, TEST_SPLIT, VAL_SPLIT, RANDOM_SEED
+        )
+        log(
+            f"\n  Stratified split: {len(train_samples)} train / {len(val_samples)} val / "
+            f"{len(test_samples)} test  ({int(TEST_SPLIT * 100)}% holdout, {int(VAL_SPLIT * 100)}% val, rest train)"
+        )
+    else:
+        train_samples, val_samples = stratified_split(all_samples, VAL_SPLIT, RANDOM_SEED)
+        log(f"\n  Stratified split: {len(train_samples)} train / {len(val_samples)} val")
 
     if device.type == "cpu":
         n_train = len(train_samples)
@@ -855,13 +1044,25 @@ def main() -> None:
 
     train_cnt = Counter(label for _, label in train_samples)
     val_cnt = Counter(label for _, label in val_samples)
-    log("  Train distribution:")
+    test_cnt = Counter(label for _, label in test_samples) if test_samples else None
+    log("  Train / val distribution:" + (" / test" if test_cnt else ""))
     for cls in class_names:
-        log(f"    {cls:30s} train={train_cnt[cls]:5d}  val={val_cnt[cls]:4d}")
+        if test_cnt is not None:
+            log(
+                f"    {cls:30s} train={train_cnt[cls]:5d}  val={val_cnt[cls]:4d}  "
+                f"test={test_cnt.get(cls, 0):4d}"
+            )
+        else:
+            log(f"    {cls:30s} train={train_cnt[cls]:5d}  val={val_cnt[cls]:4d}")
 
     # -- Build datasets and model --------------------------------------------
     train_ds, val_ds, model = build_all(
-        train_samples, val_samples, class_to_idx, arch=arch, img_size=img_size,
+        train_samples,
+        val_samples,
+        class_to_idx,
+        arch=arch,
+        img_size=img_size,
+        classifier_dropout=classifier_dropout,
     )
     model = model.to(device)
 
@@ -881,6 +1082,13 @@ def main() -> None:
         val_ds, batch_size=batch_size, shuffle=False, num_workers=nw,
         persistent_workers=(nw > 0),
     )
+    test_loader = None
+    if test_samples:
+        test_ds = ScanDataset(test_samples, val_ds.tf, class_to_idx)
+        test_loader = DataLoader(
+            test_ds, batch_size=batch_size, shuffle=False, num_workers=nw,
+            persistent_workers=(nw > 0), pin_memory=(device.type == "cuda"),
+        )
 
     # -- Class-weighted focal or CE ------------------------------------------
     loss_weights = torch.tensor(class_weights / class_weights.sum() * n_classes, dtype=torch.float32).to(device)
@@ -914,6 +1122,11 @@ def main() -> None:
             "n_classes": n_classes,
             "arch": arch,
             "img_size": img_size,
+            "classifier_dropout": classifier_dropout,
+            "class_mode": class_mode,
+            "val_metric": val_metric_arg,
+            "val_metric_effective": val_metric_effective,
+            "use_test_holdout": use_test_holdout,
             "head_epochs": head_epochs,
             "max_epochs": max_epochs,
             "patience": patience,
@@ -968,8 +1181,12 @@ def main() -> None:
                 mixup_alpha=mixup_alpha,
                 mixup_prob=mixup_prob,
             )
-            val_acc, _, _ = eval_epoch(model, val_loader, device, desc="val")
-            log(f"  Epoch {epoch:2d}/{head_epochs} | train={train_acc:.4f} | val={val_acc:.4f}")
+            val_acc, vpred, vlab = eval_epoch(model, val_loader, device, desc="val")
+            vf1 = f1_score(vlab, vpred, average="macro", zero_division=0)
+            log(
+                f"  Epoch {epoch:2d}/{head_epochs} | train={train_acc:.4f} | "
+                f"val_acc={val_acc:.4f} | val_f1={vf1:.4f}"
+            )
             save_train_checkpoint(
                 checkpoint_path,
                 pack_ckpt(
@@ -1034,11 +1251,13 @@ def main() -> None:
             mixup_prob=mixup_prob,
         )
         val_acc, val_preds, val_labels = eval_epoch(model, val_loader, device, desc="val")
+        val_f1m = f1_score(val_labels, val_preds, average="macro", zero_division=0)
+        val_score = val_f1m if val_metric_effective == "f1_macro" else val_acc
         scheduler.step()
 
-        improved = val_acc > best_val_acc
+        improved = val_score > best_val_acc
         if improved:
-            best_val_acc = val_acc
+            best_val_acc = val_score
             best_state = {k: v.cpu().clone() for k, v in model.state_dict().items()}
             patience_cnt = 0
             marker = " [best]"
@@ -1046,7 +1265,10 @@ def main() -> None:
             patience_cnt += 1
             marker = f" (no improve {patience_cnt}/{patience})"
 
-        log(f"  Epoch {epoch:2d}/{max_epochs} | train={train_acc:.4f} | val={val_acc:.4f}{marker}")
+        log(
+            f"  Epoch {epoch:2d}/{max_epochs} | train={train_acc:.4f} | val_acc={val_acc:.4f} | "
+            f"val_f1={val_f1m:.4f} | select={val_metric_effective}={val_score:.4f}{marker}"
+        )
 
         save_train_checkpoint(
             checkpoint_path,
@@ -1076,10 +1298,11 @@ def main() -> None:
     log(f"{'=' * 70}")
 
     val_acc_final, val_preds, val_labels = eval_epoch(model, val_loader, device)
+    val_f1_final = f1_score(val_labels, val_preds, average="macro", zero_division=0)
     label_ids = list(range(n_classes))
     label_names = [idx_to_class[i] for i in label_ids]
 
-    log(f"\n  Accuracy: {val_acc_final:.4f}")
+    log(f"\n  Accuracy: {val_acc_final:.4f}  |  macro F1: {val_f1_final:.4f}")
     log("\n  Classification Report:")
     log(classification_report(
         val_labels, val_preds,
@@ -1099,6 +1322,26 @@ def main() -> None:
         acc_i = correct_i / total_i if total_i > 0 else 0
         log(f"    {label_names[i]:25s} {acc_i:.4f} ({correct_i}/{total_i})")
 
+    test_acc_final: float | None = None
+    test_f1_final: float | None = None
+    if test_loader is not None:
+        log(f"\n{'=' * 70}")
+        log("  TEST HOLDOUT (unseen) — best checkpoint")
+        log(f"{'=' * 70}")
+        test_acc_final, t_pred, t_lab = eval_epoch(model, test_loader, device)
+        test_f1_final = f1_score(t_lab, t_pred, average="macro", zero_division=0)
+        log(f"\n  Test accuracy: {test_acc_final:.4f}  |  macro F1: {test_f1_final:.4f}")
+        log("\n  Test classification report:")
+        log(
+            classification_report(
+                t_lab, t_pred, labels=label_ids, target_names=label_names, zero_division=0,
+            )
+        )
+        t_cm = confusion_matrix(t_lab, t_pred, labels=label_ids)
+        log("  Test confusion matrix:")
+        for i, row in enumerate(t_cm):
+            log(f"    {label_names[i]:25s} {row}")
+
     # ========================================================================
     # Save artifacts
     # ========================================================================
@@ -1106,6 +1349,8 @@ def main() -> None:
     model_path = MODELS_DIR / "brain_scan_classifier.pt"
     meta_path = MODELS_DIR / "brain_scan_classifier_meta.json"
 
+    val_acc_at_best = float(val_acc_final)
+    meta_version = "v4-stroke3" if class_mode == "stroke3" else "v3"
     import torch
     torch.save({
         "model_state_dict": model.state_dict(),
@@ -1114,8 +1359,10 @@ def main() -> None:
         "n_classes":        n_classes,
         "img_size":         img_size,
         "best_val_acc":     best_val_acc,
+        "val_selection_metric": val_metric_effective,
         "arch":             arch,
-        "classifier_dropout": CLASSIFIER_DROPOUT,
+        "classifier_dropout": classifier_dropout,
+        "class_mode":       class_mode,
     }, model_path)
 
     meta = {
@@ -1124,13 +1371,21 @@ def main() -> None:
         "class_to_idx":   class_to_idx,
         "idx_to_class":   {str(k): v for k, v in idx_to_class.items()},
         "img_size":       img_size,
-        "classifier_dropout": CLASSIFIER_DROPOUT,
+        "classifier_dropout": classifier_dropout,
+        "class_mode":     class_mode,
+        "val_selection_metric": val_metric_effective,
+        "val_selection_score": round(best_val_acc, 4),
+        "val_accuracy":  round(val_acc_at_best, 4),
+        "val_f1_macro":  round(val_f1_final, 4),
         "best_val_acc":   round(best_val_acc, 4),
         "train_samples":  len(train_samples),
         "val_samples":    len(val_samples),
+        "test_samples":   len(test_samples) if use_test_holdout else 0,
+        "test_acc":      round(test_acc_final, 4) if test_acc_final is not None else None,
+        "test_f1_macro":  round(test_f1_final, 4) if test_f1_final is not None else None,
         "class_counts":   dict(cnt),
         "training_timestamp": time.strftime("%Y-%m-%d %H:%M:%S"),
-        "version":        "v2",
+        "version":        meta_version,
         "quick_mode":     quick_mode,
         "medium_mode":    medium_mode,
         "data_profile":   data_profile,
@@ -1146,7 +1401,12 @@ def main() -> None:
     log(f"{'=' * 70}")
     log(f"  Checkpoint : {model_path}")
     log(f"  Metadata   : {meta_path}")
-    log(f"  Best val   : {best_val_acc:.4f}")
+    log(
+        f"  Best val ({val_metric_effective}) : {best_val_acc:.4f}  |  final val acc: {val_acc_at_best:.4f}  "
+        f"| val F1: {val_f1_final:.4f}"
+    )
+    if test_acc_final is not None:
+        log(f"  Test holdout: acc={test_acc_final:.4f}  macro F1={test_f1_final:.4f}")
     log(f"  Classes    : {class_names}")
     log(f"  Total data : {len(all_samples)} images")
     log(f"{'=' * 70}\n")

@@ -1,11 +1,10 @@
 import { useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { ChevronDown } from 'lucide-react'
+import { ChevronDown, ArrowDown, Sparkles, Play } from 'lucide-react'
 import logoMark from '../assets/logo.svg'
 
 const VIDEO_URL =
-  'https://d8j0ntlcm91z4.cloudfront.net/user_38xzZboKViGWJOttwIXH07lWA1P/hf_20260328_065045_c44942da-53c6-4804-b734-f9e07fc22e08.mp4'
-
+  'https://d8j0ntlcm91z4.cloudfront.net/user_38xzZboKViGWJOttwIXH07lWA1P/hf_20260416_101255_3099d3e4-d0cf-4e59-9666-97fbf521ac71.mp4'
 const FADE_SEC = 0.5
 
 const NAV_ITEMS: { label: string; href: string; chevron?: boolean }[] = [
@@ -15,16 +14,15 @@ const NAV_ITEMS: { label: string; href: string; chevron?: boolean }[] = [
   { label: 'Impact', href: '#stats' },
 ]
 
-const MARQUEE_BRANDS = ['Vortex', 'Nimbus', 'Prysma', 'Cirrus', 'Kynder', 'Halcyn']
+const MARQUEE_BRANDS = ['MediaPipe', 'OpenCV', 'PyTorch', 'scikit-learn', 'React', 'ESP32', 'NumPy', 'Vite']
 
 function LogoMarqueeItem({ name }: { name: string }) {
-  const letter = name[0] ?? '?'
   return (
-    <div className="flex shrink-0 items-center gap-3">
-      <div className="liquid-glass flex h-6 w-6 items-center justify-center rounded-lg text-xs font-semibold text-foreground">
-        {letter}
+    <div className="flex shrink-0 items-center gap-3 group cursor-default">
+      <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-white/5 border border-white/8 text-xs font-bold text-foreground/60 transition-all duration-300 group-hover:bg-white/10 group-hover:scale-110">
+        {name[0]}
       </div>
-      <span className="text-base font-semibold text-foreground">{name}</span>
+      <span className="text-sm font-medium text-foreground/35 transition-colors duration-300 group-hover:text-foreground/60">{name}</span>
     </div>
   )
 }
@@ -32,11 +30,12 @@ function LogoMarqueeItem({ name }: { name: string }) {
 export default function Hero() {
   const videoRef = useRef<HTMLVideoElement>(null)
   const [videoOpacity, setVideoOpacity] = useState(0)
+  const [step, setStep] = useState(0)
 
+  /* Video fade-in / fade-out loop */
   useEffect(() => {
     const video = videoRef.current
     if (!video) return
-
     let rafId = 0
     let cancelled = false
 
@@ -65,10 +64,7 @@ export default function Hero() {
         el.play().catch(() => {})
       }, 100)
     }
-
-    const onLoaded = () => {
-      video.play().catch(() => {})
-    }
+    const onLoaded = () => video.play().catch(() => {})
 
     video.addEventListener('ended', onEnded)
     video.addEventListener('loadeddata', onLoaded)
@@ -82,10 +78,20 @@ export default function Hero() {
     }
   }, [])
 
+  useEffect(() => {
+    const timers = [
+      setTimeout(() => setStep(1), 300),
+      setTimeout(() => setStep(2), 600),
+      setTimeout(() => setStep(3), 1000),
+      setTimeout(() => setStep(4), 1400),
+    ]
+    return () => timers.forEach(clearTimeout)
+  }, [])
+
   return (
-    <section className="relative flex min-h-screen flex-col overflow-visible bg-background text-foreground">
-      {/* Video (no gradient overlays) */}
-      <div className="absolute inset-0 overflow-hidden">
+    <section className="relative flex min-h-screen flex-col overflow-hidden text-foreground" style={{ background: '#0c0a12' }}>
+      {/* ── FULLSCREEN VIDEO ── */}
+      <div className="absolute inset-0 z-0 overflow-hidden">
         <video
           ref={videoRef}
           className="absolute inset-0 h-full w-full object-cover"
@@ -97,95 +103,88 @@ export default function Hero() {
         />
       </div>
 
-      {/* Blurred center shape — behind content */}
-      <div
-        className="pointer-events-none absolute left-1/2 top-1/2 z-1 h-[527px] w-[984px] max-w-[95vw] -translate-x-1/2 -translate-y-1/2 bg-gray-950 opacity-90 blur-[82px]"
-        aria-hidden
-      />
+      {/* Minimal vignette — just enough for text readability, NOT blocking video */}
+      <div className="pointer-events-none absolute inset-0 z-[1]" style={{ background: 'radial-gradient(ellipse at center, transparent 30%, rgba(5,0,16,0.4) 100%)' }} />
+      {/* Bottom fade to merge into next section */}
+      <div className="pointer-events-none absolute bottom-0 left-0 right-0 h-40 z-[1] bg-gradient-to-t from-[#0c0a12] to-transparent" />
 
+      {/* ── CONTENT ── */}
       <div className="relative z-10 flex min-h-screen flex-col">
         {/* Navbar */}
-        <nav className="flex w-full flex-row items-center justify-between px-8 py-5">
-          <Link to="/" className="flex items-center gap-2.5">
-            <img src={logoMark} alt="NeuroHand" className="h-8 w-auto" />
+        <nav className="flex w-full items-center justify-between px-6 py-5 md:px-10 lg:px-16">
+          <Link to="/" className="group">
+            <img src={logoMark} alt="NeuroHand" className="h-9 w-auto transition-all duration-300 group-hover:drop-shadow-[0_0_12px_rgba(139,92,246,0.5)]" />
           </Link>
-
-          <div className="hidden items-center gap-8 md:flex">
+          <div className="hidden md:flex items-center gap-1">
             {NAV_ITEMS.map((item) => (
-              <a
-                key={item.label}
-                href={item.href}
-                className="flex items-center gap-1 text-sm text-foreground/90 transition-colors hover:text-foreground"
-              >
+              <a key={item.label} href={item.href}
+                className="relative flex items-center gap-1 px-4 py-2 rounded-full text-sm text-white/60 transition-all duration-300 hover:text-white hover:bg-white/5 backdrop-blur-sm group">
                 {item.label}
-                {item.chevron && <ChevronDown className="h-4 w-4 opacity-70" strokeWidth={2} />}
+                {item.chevron && <ChevronDown className="h-3.5 w-3.5 opacity-40 transition-transform group-hover:rotate-180" strokeWidth={2.5} />}
               </a>
             ))}
           </div>
-
-          <Link to="/scan" className="btn-hero-secondary rounded-full px-4 py-2 text-sm font-medium">
-            Brain scan
+          <Link to="/scan" className="inline-flex items-center gap-2 rounded-full bg-white/[0.08] border border-white/15 px-5 py-2.5 text-sm font-medium text-white backdrop-blur-md transition-all duration-300 hover:bg-white/[0.14] hover:border-white/25">
+            <span className="w-2 h-2 rounded-full bg-emerald-400 shadow-[0_0_6px_rgba(52,211,153,0.5)]" />
+            Start Analysis
           </Link>
         </nav>
 
-        {/* Divider under navbar */}
-        <div
-          className="mx-auto mt-[3px] h-px w-full max-w-[calc(100%-4rem)] bg-linear-to-r from-transparent via-foreground/20 to-transparent"
-          aria-hidden
-        />
+        <div className="mx-auto h-px w-full max-w-[calc(100%-3rem)] bg-gradient-to-r from-transparent via-white/10 to-transparent" />
 
-        {/* Hero copy — vertically centered */}
-        <div className="flex flex-1 flex-col items-center justify-center px-6 pt-4 pb-8 md:px-8">
-          <h1
-            className="font-heading max-w-[100vw] text-center font-normal leading-[1.02] tracking-[-0.024em] text-[clamp(3rem,14vw,13.75rem)]"
-            style={{ fontFamily: "'General Sans', var(--font-heading), sans-serif" }}
-          >
-            <span className="text-foreground">Neuro</span>
-            <span
-              className="bg-clip-text text-transparent"
-              style={{
-                backgroundImage: 'linear-gradient(to left, #6366f1, #a855f7, #fcd34d)',
-              }}
-            >
-              Hand
-            </span>
-          </h1>
+        {/* Hero text — LEFT BOTTOM corner */}
+        <div className="flex flex-1 items-end px-6 md:px-10 lg:px-16 pb-28">
+          <div className="max-w-2xl">
+            {/* Badge */}
+            <div className={`mb-6 inline-flex items-center gap-2.5 rounded-full border border-white/15 bg-white/[0.06] px-5 py-2.5 text-sm backdrop-blur-md transition-all duration-700 ${step >= 1 ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-3'}`}>
+              <span className="relative flex h-2 w-2">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-purple-400 opacity-75" />
+                <span className="relative inline-flex rounded-full h-2 w-2 bg-purple-500" />
+              </span>
+              <span className="text-white/80 font-medium">AI-Powered Neuro Rehabilitation</span>
+            </div>
 
-          <p className="text-hero-sub mt-[9px] max-w-xl text-center text-lg leading-8 opacity-80">
-            Brain CT classification → guided 3D regions → hand rehab with MediaPipe,
-            <br />
-            personalized sessions, and haptic feedback. Built for neuro recovery.
-          </p>
+            {/* Title */}
+            <h1 className={`font-bold leading-[0.92] tracking-[-0.04em] transition-all duration-1000 ease-out ${step >= 2 ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-10'}`}
+              style={{ fontFamily: 'var(--font-heading)', fontSize: 'clamp(3rem, 8vw, 7.5rem)' }}>
+              <span className="text-white drop-shadow-[0_2px_20px_rgba(0,0,0,0.5)]">Neuro</span>
+              <span className="text-gradient-hero drop-shadow-[0_2px_20px_rgba(0,0,0,0.3)]">Hand</span>
+            </h1>
 
-          <div className="mt-[25px] flex flex-col items-center gap-3 sm:flex-row sm:justify-center">
-            <Link
-              to="/scan"
-              className="btn-hero-secondary px-[29px] py-[20px] text-base font-medium"
-            >
-              Upload brain scan
-            </Link>
-            <Link
-              to="/session"
-              className="rounded-full border border-white/20 bg-white/5 px-8 py-[20px] text-base font-medium text-foreground/90 transition-colors hover:border-white/35 hover:bg-white/10"
-            >
-              Start rehab
-            </Link>
+            {/* Subtitle */}
+            <p className={`mt-5 max-w-lg text-lg leading-relaxed transition-all duration-700 ${step >= 3 ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-6'}`}>
+              <span className="text-white/70 drop-shadow-[0_1px_8px_rgba(0,0,0,0.6)]">Recovery isn't one-size-fits-all. </span>
+              <span className="text-white font-semibold drop-shadow-[0_1px_8px_rgba(0,0,0,0.6)]">Your healthy hand teaches the other.</span>
+            </p>
+
+            {/* Buttons */}
+            <div className={`mt-8 flex flex-wrap items-center gap-4 transition-all duration-700 ${step >= 4 ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-6'}`}>
+              <Link to="/scan"
+                className="group relative inline-flex items-center gap-2.5 rounded-2xl px-8 py-4 text-base font-semibold text-white overflow-hidden transition-all duration-300 hover:-translate-y-0.5 hover:shadow-[0_8px_40px_rgba(139,92,246,0.4)]"
+                style={{ background: 'linear-gradient(135deg, #6366f1, #8b5cf6, #a855f7)' }}>
+                <div className="absolute inset-0 bg-gradient-to-r from-white/0 via-white/20 to-white/0 -translate-x-full group-hover:translate-x-full transition-transform duration-700" />
+                <Sparkles className="w-5 h-5 relative z-10" />
+                <span className="relative z-10">Upload Brain Scan</span>
+              </Link>
+              <Link to="/session"
+                className="group inline-flex items-center gap-2.5 rounded-2xl border border-white/15 bg-white/[0.06] backdrop-blur-md px-8 py-4 text-base font-medium text-white/80 transition-all duration-300 hover:bg-white/[0.12] hover:border-white/25 hover:-translate-y-0.5">
+                <Play className="w-4 h-4 text-purple-400" />
+                Start Rehab
+              </Link>
+            </div>
           </div>
         </div>
 
-        {/* Logo marquee — bottom */}
-        <div className="mx-auto flex w-full max-w-5xl flex-col items-stretch gap-6 px-6 pb-10 md:flex-row md:items-center md:justify-between md:gap-12">
-          <p className="text-sm text-foreground/50 md:max-w-[220px]">
-            Stack &amp; partners
-            <br />
-            we build on
-          </p>
-
-          <div className="min-w-0 flex-1 overflow-hidden">
-            <div className="flex w-max gap-16 animate-marquee">
-              {[...MARQUEE_BRANDS, ...MARQUEE_BRANDS].map((name, i) => (
-                <LogoMarqueeItem key={`${name}-${i}`} name={name} />
-              ))}
+        {/* Marquee */}
+        <div className="border-t border-white/[0.06]">
+          <div className="mx-auto flex w-full max-w-7xl items-center gap-8 px-6 py-7 md:px-10 lg:px-16">
+            <p className="text-[10px] uppercase tracking-[0.2em] text-foreground/20 font-bold shrink-0">Powered by</p>
+            <div className="min-w-0 flex-1 overflow-hidden">
+              <div className="flex w-max gap-14 animate-marquee">
+                {[...MARQUEE_BRANDS, ...MARQUEE_BRANDS].map((name, i) => (
+                  <LogoMarqueeItem key={`${name}-${i}`} name={name} />
+                ))}
+              </div>
             </div>
           </div>
         </div>
