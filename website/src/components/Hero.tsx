@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { ChevronDown, ArrowDown, Sparkles, Play } from 'lucide-react'
-import logoMark from '../assets/logo.svg'
+import { ChevronDown, Sparkles, Play } from 'lucide-react'
+const LOGO_URL = '/rehab-twin-logo.png'
 
 const VIDEO_URL =
   'https://d8j0ntlcm91z4.cloudfront.net/user_38xzZboKViGWJOttwIXH07lWA1P/hf_20260416_101255_3099d3e4-d0cf-4e59-9666-97fbf521ac71.mp4'
@@ -112,8 +112,12 @@ export default function Hero() {
       <div className="relative z-10 flex min-h-screen flex-col">
         {/* Navbar */}
         <nav className="flex w-full items-center justify-between px-6 py-5 md:px-10 lg:px-16">
-          <Link to="/" className="group">
-            <img src={logoMark} alt="NeuroHand" className="h-9 w-auto transition-all duration-300 group-hover:drop-shadow-[0_0_12px_rgba(139,92,246,0.5)]" />
+          <Link to="/" className="group flex items-center rounded-lg bg-white/95 px-2 py-1 shadow-sm ring-1 ring-black/5 transition-all duration-300 hover:bg-white hover:shadow-md md:px-2.5 md:py-1.5">
+            <img
+              src={LOGO_URL}
+              alt="RehabTwin"
+              className="h-8 w-auto max-h-9 object-contain object-left md:h-9"
+            />
           </Link>
           <div className="hidden md:flex items-center gap-1">
             {NAV_ITEMS.map((item) => (
@@ -141,14 +145,14 @@ export default function Hero() {
                 <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-purple-400 opacity-75" />
                 <span className="relative inline-flex rounded-full h-2 w-2 bg-purple-500" />
               </span>
-              <span className="text-white/80 font-medium">AI-Powered Neuro Rehabilitation</span>
+              <span className="text-white/80 font-medium">Track. Train. Recover.</span>
             </div>
 
             {/* Title */}
             <h1 className={`font-bold leading-[0.92] tracking-[-0.04em] transition-all duration-1000 ease-out ${step >= 2 ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-10'}`}
               style={{ fontFamily: 'var(--font-heading)', fontSize: 'clamp(3rem, 8vw, 7.5rem)' }}>
-              <span className="text-white drop-shadow-[0_2px_20px_rgba(0,0,0,0.5)]">Neuro</span>
-              <span className="text-gradient-hero drop-shadow-[0_2px_20px_rgba(0,0,0,0.3)]">Hand</span>
+              <span className="text-[#e8f4fc] drop-shadow-[0_2px_20px_rgba(0,0,0,0.5)]">Rehab</span>
+              <span className="text-[#2dd4bf] drop-shadow-[0_2px_20px_rgba(0,0,0,0.35)]">Twin</span>
             </h1>
 
             {/* Subtitle */}

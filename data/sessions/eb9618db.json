@@ -1,0 +1,24 @@
+{
+  "session_id": "eb9618db",
+  "status": "active",
+  "started_at": "2026-04-25T07:09:35.632631",
+  "ended_at": null,
+  "config": {
+    "affected_hand": "right",
+    "exercises": [
+      "pinch",
+      "point",
+      "thumb_out",
+      "wrist_circle",
+      "elbow_flex",
+      "number_two"
+    ],
+    "difficulty": "medium",
+    "duration_minutes": 5
+  },
+  "score": 0,
+  "exercises_completed": 0,
+  "total_exercises": 18,
+  "timeline": [],
+  "duration_seconds": 0
+}

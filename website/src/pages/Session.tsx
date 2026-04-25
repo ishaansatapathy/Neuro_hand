@@ -12,10 +12,15 @@ import {
   type Gesture,
 } from '../config/gestures'
 import type { StrokeAnalysis } from '../lib/brainRules'
-import { getExercisePlanFromScan, type ScanExercisePlan } from '../lib/scanExercisePlan'
+import {
+  getExercisePlanFromScan,
+  getExercisePlanFromScanSignals,
+  type ScanExercisePlan,
+  type ScanSignals,
+} from '../lib/scanExercisePlan'
 import { useHandPoseVerification } from '../hooks/useHandPoseVerification'
 
-type SessionPhase = 'checking' | 'analyzing' | 'setup' | 'start_analyzing' | 'active' | 'complete'
+type SessionPhase = 'checking' | 'needs_scan' | 'analyzing' | 'setup' | 'start_analyzing' | 'active' | 'complete'
 type Difficulty = 'easy' | 'medium' | 'hard'
 
 interface SessionResult {
@@ -237,7 +242,12 @@ export default function Session() {
 
   // Setup
   const [hand, setHand] = useState<'left' | 'right'>('right')
-  const [exercises, setExercises] = useState<Gesture[]>(['open_hand', 'fist', 'point'])
+  // Start empty — the scan resolver populates this once it returns.
+  // (Previously hardcoded to ['open_hand','fist','point'], which is why every
+  // session looked identical when the API was slow or stale.)
+  const [exercises, setExercises] = useState<Gesture[]>([])
+  const [planLoaded, setPlanLoaded] = useState(false)
+  const [userEditedExercises, setUserEditedExercises] = useState(false)
   const [difficulty, setDifficulty] = useState<Difficulty>('medium')
   const [duration, setDuration] = useState(5)
   const [loading, setLoading] = useState(false)
@@ -256,6 +266,7 @@ export default function Session() {
 
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const gestureTimerRef = useRef<ReturnType<typeof setInterval> | null>(null)
+  const scoreCheckRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const audioRef = useRef<HTMLAudioElement | null>(null)
   const videoRef = useRef<HTMLVideoElement | null>(null)
   const canvasRef = useRef<HTMLCanvasElement | null>(null)
@@ -272,17 +283,31 @@ export default function Session() {
     sessionSnapshotRef.current = { sessionId, score, timeLeft, totalTime, difficulty }
   }, [sessionId, score, timeLeft, totalTime, difficulty])
 
+  // Canvas already has CSS `-scale-x-100`, so pass mirrored={false} to avoid
+  // double-flipping the landmark coords (previously drew skeleton on the wrong side).
   const poseVerify = useHandPoseVerification(
     videoRef,
     canvasRef,
     currentGesture,
     sessionPhase === 'active',
-    true,
+    false,
   )
   const poseMatchRef = useRef(0)
   useEffect(() => {
     poseMatchRef.current = poseVerify.matchPct
   }, [poseVerify.matchPct])
+
+  useEffect(() => {
+    return () => {
+      if (timerRef.current) clearInterval(timerRef.current)
+      if (gestureTimerRef.current) clearInterval(gestureTimerRef.current)
+      if (scoreCheckRef.current) clearTimeout(scoreCheckRef.current)
+      if (audioRef.current) audioRef.current.pause()
+      if (typeof window !== 'undefined' && window.speechSynthesis) {
+        window.speechSynthesis.cancel()
+      }
+    }
+  }, [])
 
   useEffect(() => {
     fetch('/poses/manifest.json')
@@ -297,7 +322,7 @@ export default function Session() {
 
   useEffect(() => {
     if (!hasCompletedScan()) {
-      navigate('/scan', { replace: true })
+      setSessionPhase('needs_scan')
       return
     }
     const toAnalyzing = window.setTimeout(() => setSessionPhase('analyzing'), 0)
@@ -306,40 +331,74 @@ export default function Session() {
       window.clearTimeout(toAnalyzing)
       window.clearTimeout(toSetup)
     }
-  }, [navigate])
+  }, [])
 
   useEffect(() => {
+    if (!hasCompletedScan()) return // gated screen handles this case
+
     const snap = loadScanSnapshot()
-    const applyPlan = (strokeType: string, o: { classification?: string; brainRegion?: string; predictedClass?: string }) => {
-      const plan = getExercisePlanFromScan(strokeType, o)
+
+    const applyFromSignals = (sig: ScanSignals) => {
+      const plan = getExercisePlanFromScanSignals(sig)
       setScanPlan(plan)
-      if (plan.exercises.length) setExercises(plan.exercises)
+      // Only replace exercises if the user hasn't started curating them.
+      if (plan.exercises.length) {
+        setExercises(prev => (userEditedExercises && prev.length ? prev : plan.exercises))
+      }
+      setPlanLoaded(true)
     }
 
     getLatestScanAnalysis()
       .then(data => {
-        const strokeType = data.stroke_analysis?.stroke_type ?? snap?.stroke_type ?? ''
-        const apiCls = (data.classification?.prediction as string | undefined)?.trim()
-        const legacyPred = String(data.predicted_class ?? snap?.predicted_class ?? '').trim()
-        const region = (data.brain_region?.region as string | undefined) ?? snap?.brain_region ?? ''
-        applyPlan(strokeType, {
-          classification: apiCls ?? '',
-          predictedClass: legacyPred,
-          brainRegion: region,
-        })
+        const sa = data.stroke_analysis ?? {}
+        const metrics = sa.scan_metrics ?? {}
+        const zones = Array.isArray(sa.affected_zones) ? sa.affected_zones : []
+
+        const sig: ScanSignals = {
+          scanId: data.scan_id ?? snap?.ts?.toString(),
+          strokeType: sa.stroke_type ?? snap?.stroke_type ?? '',
+          classification: (data.classification?.prediction as string | undefined) ?? '',
+          predictedClass: String(data.predicted_class ?? snap?.predicted_class ?? '').trim(),
+          brainRegion: (data.brain_region?.region as string | undefined) ?? snap?.brain_region ?? '',
+          affectedSide: metrics.affected_side,
+          avgSeverity: typeof metrics.avg_severity === 'number' ? metrics.avg_severity : undefined,
+          lesionCoveragePct: typeof metrics.lesion_coverage_pct === 'number' ? metrics.lesion_coverage_pct : undefined,
+          zonesAffected: typeof metrics.zones_affected === 'number' ? metrics.zones_affected : zones.length || undefined,
+          affectedZoneNames: zones.map((z: { zone?: string }) => z?.zone ?? '').filter(Boolean),
+          confidence: typeof data.confidence === 'number' ? data.confidence : snap?.confidence,
+        }
+        applyFromSignals(sig)
+
         if (data.has_scan && data.stroke_analysis) {
           setScanAnalysis(data.stroke_analysis)
+          // Auto-suggest affected hand from the scan (opposite hemisphere rules).
+          const side = String(metrics.affected_side ?? '').toLowerCase()
+          if (side === 'left') setHand('right')
+          else if (side === 'right') setHand('left')
         }
       })
       .catch(() => {
         if (snap) {
-          applyPlan(snap.stroke_type ?? '', {
+          applyFromSignals({
+            scanId: snap.ts?.toString(),
+            strokeType: snap.stroke_type ?? '',
             classification: snap.classification_prediction ?? '',
             predictedClass: snap.predicted_class ?? '',
             brainRegion: snap.brain_region,
+            confidence: snap.confidence,
           })
+        } else {
+          // No scan + no snapshot → fall back to the legacy resolver's default
+          // so the user isn't stuck with zero exercises.
+          const plan = getExercisePlanFromScan('', {})
+          setScanPlan(plan)
+          setExercises(plan.exercises)
+          setPlanLoaded(true)
         }
       })
+    // `userEditedExercises` is intentionally not in deps: we only want the
+    // plan fetched once per mount.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   useEffect(() => {
@@ -388,12 +447,32 @@ export default function Session() {
   }, [])
 
   const toggleExercise = (ex: Gesture) => {
+    setUserEditedExercises(true)
     setExercises(prev =>
       prev.includes(ex) ? prev.filter(e => e !== ex) : [...prev, ex]
     )
   }
 
   const playVoice = useCallback((gesture: Gesture) => {
+    const message = GESTURE_MESSAGES[gesture]
+
+    // Prefer browser TTS — speaks the *exact* message per gesture.
+    // Server-cached clips only cover 3 of 25 gestures so they'd lie about the pose.
+    const synth = typeof window !== 'undefined' ? window.speechSynthesis : null
+    if (synth) {
+      try {
+        synth.cancel()
+        const u = new SpeechSynthesisUtterance(message)
+        u.rate = 1
+        u.pitch = 1.05
+        u.volume = 1
+        synth.speak(u)
+        return
+      } catch {
+        // fall through to audio fallback
+      }
+    }
+
     try {
       if (audioRef.current) {
         audioRef.current.pause()
@@ -407,6 +486,56 @@ export default function Session() {
     }
   }, [])
 
+  // Hold-time scoring: user gets +1 when they sustain ≥72% match for
+  // HOLD_REQUIRED_MS cumulative during the gesture window. Much more forgiving
+  // than a single-moment snapshot — and the progress bar gives live feedback.
+  const HOLD_REQUIRED_MS = 800
+  const MATCH_THRESHOLD = 72
+  const holdMsRef = useRef(0)
+  const gestureScoredRef = useRef(false)
+  const [holdProgress, setHoldProgress] = useState(0)
+
+  const scheduleScoreCheck = useCallback((delayMs = 2800) => {
+    if (scoreCheckRef.current) clearTimeout(scoreCheckRef.current)
+    holdMsRef.current = 0
+    gestureScoredRef.current = false
+    setHoldProgress(0)
+
+    const lastTickRef = { t: performance.now() }
+    const tick = () => {
+      const now = performance.now()
+      const dt = now - lastTickRef.t
+      lastTickRef.t = now
+
+      if (poseMatchRef.current >= MATCH_THRESHOLD) {
+        holdMsRef.current = Math.min(HOLD_REQUIRED_MS, holdMsRef.current + dt)
+      } else {
+        // Decay so a flash doesn't carry the whole window
+        holdMsRef.current = Math.max(0, holdMsRef.current - dt * 0.5)
+      }
+      setHoldProgress(holdMsRef.current / HOLD_REQUIRED_MS)
+
+      if (holdMsRef.current >= HOLD_REQUIRED_MS && !gestureScoredRef.current) {
+        gestureScoredRef.current = true
+        setScore(s => s + 1)
+        setMessage('Great! +1 — pose held ✓')
+      }
+    }
+
+    const interval = setInterval(tick, 80)
+    scoreCheckRef.current = setTimeout(() => {
+      clearInterval(interval)
+      scoreCheckRef.current = null
+      if (!gestureScoredRef.current) {
+        setMessage(
+          poseMatchRef.current >= MATCH_THRESHOLD
+            ? 'Close! Hold the pose a bit longer'
+            : 'Match the target pose in frame'
+        )
+      }
+    }, delayMs)
+  }, [])
+
   const cycleGesture = useCallback(() => {
     if (exercises.length === 0) return
     setGestureIndex(prev => {
@@ -415,20 +544,10 @@ export default function Session() {
       setCurrentGesture(nextGesture)
       setMessage(GESTURE_MESSAGES[nextGesture])
       playVoice(nextGesture)
-
-      setTimeout(() => {
-        const hit = poseMatchRef.current >= 72
-        if (hit) {
-          setScore(s => s + 1)
-          setMessage('Great! +1 (camera verified)')
-        } else {
-          setMessage('Match the target pose in frame')
-        }
-      }, 2500)
-
+      scheduleScoreCheck()
       return next
     })
-  }, [exercises, playVoice])
+  }, [exercises, playVoice, scheduleScoreCheck])
 
   const handleStart = async () => {
     if (exercises.length === 0) return
@@ -453,14 +572,32 @@ export default function Session() {
     setScore(0)
     setGestureIndex(0)
 
+    // Show the first target immediately, but DON'T speak or score until the
+    // pose tracker finishes loading (see `firstGesturePrimed` effect below).
     const firstGesture = exercises[0]
     setCurrentGesture(firstGesture)
-    setMessage(GESTURE_MESSAGES[firstGesture])
-    playVoice(firstGesture)
+    setMessage('Get ready…')
 
     setSessionPhase('active')
     setLoading(false)
   }
+
+  // Cue the first gesture (voice + score check) only once the pose tracker
+  // is actually ready. This is what was causing "voice plays while camera
+  // still shows Loading…" on slow first loads.
+  const firstGesturePrimed = useRef(false)
+  useEffect(() => {
+    if (sessionPhase !== 'active') {
+      firstGesturePrimed.current = false
+      return
+    }
+    if (firstGesturePrimed.current) return
+    if (!poseVerify.ready) return
+    firstGesturePrimed.current = true
+    setMessage(GESTURE_MESSAGES[currentGesture])
+    playVoice(currentGesture)
+    scheduleScoreCheck()
+  }, [sessionPhase, poseVerify.ready, currentGesture, playVoice, scheduleScoreCheck])
 
   const handleEnd = useCallback(async () => {
     if (timerRef.current) {
@@ -471,7 +608,14 @@ export default function Session() {
       clearInterval(gestureTimerRef.current)
       gestureTimerRef.current = null
     }
+    if (scoreCheckRef.current) {
+      clearTimeout(scoreCheckRef.current)
+      scoreCheckRef.current = null
+    }
     if (audioRef.current) audioRef.current.pause()
+    if (typeof window !== 'undefined' && window.speechSynthesis) {
+      window.speechSynthesis.cancel()
+    }
 
     const { sessionId: sid, score: sc, timeLeft: tl, totalTime: tt, difficulty: diff } =
       sessionSnapshotRef.current
@@ -519,16 +663,18 @@ export default function Session() {
     }
   }, [sessionPhase, handleEnd])
 
-  // Gesture cycling
+  // Gesture cycling — only after the pose tracker is actually up, so the
+  // first few gestures aren't wasted while mediapipe is still downloading.
   useEffect(() => {
     if (sessionPhase !== 'active') return
+    if (!poseVerify.ready) return
 
     gestureTimerRef.current = setInterval(cycleGesture, INTERVAL_MS[difficulty])
 
     return () => {
       if (gestureTimerRef.current) clearInterval(gestureTimerRef.current)
     }
-  }, [sessionPhase, cycleGesture, difficulty])
+  }, [sessionPhase, cycleGesture, difficulty, poseVerify.ready])
 
   const handleReset = () => {
     setSessionPhase('setup')
@@ -544,6 +690,56 @@ export default function Session() {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
         <Loader2 className="w-10 h-10 text-violet-400 animate-spin" />
+      </div>
+    )
+  }
+
+  if (sessionPhase === 'needs_scan') {
+    return (
+      <div className="min-h-screen bg-background text-foreground px-4 py-20 flex items-center justify-center relative overflow-hidden">
+        <div className="ambient-glow w-[500px] h-[500px] bg-violet-600/8 -top-32 -right-32" />
+        <div className="ambient-glow w-[400px] h-[400px] bg-blue-600/6 bottom-20 -left-32" style={{ animationDelay: '3s' }} />
+        <div className="relative z-10 max-w-md w-full">
+          <div className="liquid-glass rounded-3xl p-8 sm:p-10 border border-white/8 text-center">
+            <div className="w-20 h-20 mx-auto rounded-2xl bg-gradient-to-br from-violet-500/20 to-blue-500/15 border border-violet-500/25 flex items-center justify-center mb-6 animate-float">
+              <Brain className="w-10 h-10 text-violet-300" />
+            </div>
+            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full border border-yellow-500/25 bg-yellow-500/10 text-xs text-yellow-300/90 mb-4">
+              <span className="relative flex h-2 w-2">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-yellow-400 opacity-75" />
+                <span className="relative inline-flex rounded-full h-2 w-2 bg-yellow-500" />
+              </span>
+              Scan required
+            </div>
+            <h1 className="text-3xl font-bold mb-3" style={{ fontFamily: 'var(--font-heading)', letterSpacing: '-0.03em' }}>
+              <span className="text-foreground">Go for a </span>
+              <span className="text-gradient-brand">scan first</span>
+            </h1>
+            <p className="text-foreground/55 leading-relaxed mb-8">
+              Sessions are tailored to your latest brain MRI — pose selection, affected hand,
+              and difficulty all come from the scan analysis.
+              Upload a brain scan and we'll build your rehab plan.
+            </p>
+            <div className="flex flex-col sm:flex-row gap-3">
+              <button
+                onClick={() => navigate('/scan')}
+                className="group flex-1 inline-flex items-center justify-center gap-2 px-6 py-3.5 rounded-xl font-semibold text-white transition-all duration-300 hover:-translate-y-0.5 hover:shadow-[0_8px_30px_rgba(139,92,246,0.3)] relative overflow-hidden"
+                style={{ background: 'linear-gradient(135deg, #6366f1, #8b5cf6, #a855f7)' }}
+              >
+                <div className="absolute inset-0 bg-gradient-to-r from-white/0 via-white/20 to-white/0 -translate-x-full group-hover:translate-x-full transition-transform duration-700" />
+                <Brain className="w-5 h-5" />
+                Upload Brain Scan
+                <ArrowRight className="w-5 h-5" />
+              </button>
+              <button
+                onClick={() => navigate('/')}
+                className="px-6 py-3.5 rounded-xl font-semibold text-foreground/60 hover:text-foreground border border-white/10 hover:border-white/25 transition-all duration-200"
+              >
+                Back home
+              </button>
+            </div>
+          </div>
+        </div>
       </div>
     )
   }
@@ -755,13 +951,17 @@ export default function Session() {
           {/* Start Button */}
           <button
             onClick={handleStart}
-            disabled={exercises.length === 0 || loading}
+            disabled={exercises.length === 0 || loading || !planLoaded}
             className="group w-full py-4 rounded-2xl font-bold text-lg transition-all duration-300 text-white disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center gap-3 relative overflow-hidden hover:-translate-y-0.5 hover:shadow-[0_8px_40px_rgba(139,92,246,0.3)]"
             style={{ background: 'linear-gradient(135deg, #6366f1, #8b5cf6, #a855f7)' }}
           >
             <div className="absolute inset-0 bg-gradient-to-r from-white/0 via-white/20 to-white/0 -translate-x-full group-hover:translate-x-full transition-transform duration-700" />
             {loading ? (
               <div className="w-6 h-6 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+            ) : !planLoaded ? (
+              <>
+                <Loader2 className="w-5 h-5 animate-spin" /> Loading scan plan…
+              </>
             ) : (
               <>
                 <Play className="w-6 h-6" /> Start Session
@@ -882,6 +1082,29 @@ export default function Session() {
                       : 'Mirror view — skeleton overlay tracks your hand; match the target'}
                   </p>
                 </div>
+              </div>
+            </div>
+
+            {/* Hold-time progress — fills when matching, rewards sustained pose */}
+            <div className="mt-4 px-1">
+              <div className="flex items-center justify-between mb-1.5">
+                <span className="text-[10px] font-semibold uppercase tracking-wider text-foreground/50">
+                  Hold progress
+                </span>
+                <span className="text-[10px] tabular-nums text-foreground/40">
+                  {Math.round(holdProgress * 100)}%
+                </span>
+              </div>
+              <div className="h-1.5 w-full rounded-full bg-white/5 overflow-hidden">
+                <div
+                  className="h-full rounded-full transition-all duration-100 ease-linear"
+                  style={{
+                    width: `${Math.min(100, holdProgress * 100)}%`,
+                    background: holdProgress >= 1
+                      ? 'linear-gradient(90deg, #34d399, #10b981)'
+                      : 'linear-gradient(90deg, #60a5fa, #a78bfa)',
+                  }}
+                />
               </div>
             </div>
           </div>

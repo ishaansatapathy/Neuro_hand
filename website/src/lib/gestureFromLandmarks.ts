@@ -145,12 +145,14 @@ export function matchGesture(
 
   const ideal = TARGET_BITS[target]
   if (ideal) {
+    // 5/5 bits match = 95% (vs. previous 85%) so sustained perfect form
+    // reliably exceeds the 72% scoring threshold without the classifier.
     const base = bitsSimilarity(f, ideal) * 100
     const pinchBoost =
       target === 'pinch' || target === 'ok_sign' || target === 'tripod_grasp'
-        ? Math.max(0, 1 - f.pinchDist / 0.35) * 25
+        ? Math.max(0, 1 - f.pinchDist / 0.35) * 20
         : 0
-    const pct = Math.min(99, Math.round(base * 0.85 + pinchBoost))
+    const pct = Math.min(99, Math.round(base * 0.95 + pinchBoost))
     return {
       matchPct: pct,
       detected,

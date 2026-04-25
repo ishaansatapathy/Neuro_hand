@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Link, useLocation } from 'react-router-dom'
 import { Menu, X } from 'lucide-react'
-import logoMark from '../assets/logo.svg'
+const LOGO_URL = '/rehab-twin-logo.png'
 import { hasCompletedScan } from '../lib/sessionGate'
 
 const PAGE_LINKS = [
@@ -45,11 +45,14 @@ export default function Navbar() {
       }`}
     >
       <div className="mx-auto flex max-w-7xl items-center justify-between px-6 py-4 md:px-8">
-        <Link to="/" className="flex items-center gap-2.5 group">
+        <Link
+          to="/"
+          className="group flex items-center rounded-lg bg-white/95 px-2 py-1 shadow-sm ring-1 ring-black/5 transition-all duration-300 hover:bg-white hover:shadow-md"
+        >
           <img
-            src={logoMark}
-            alt="NeuroHand"
-            className="h-8 w-auto transition-all duration-300 group-hover:drop-shadow-[0_0_12px_rgba(167,139,250,0.5)]"
+            src={LOGO_URL}
+            alt="RehabTwin"
+            className="h-7 w-auto max-h-8 object-contain object-left sm:h-8"
           />
         </Link>
 
@@ -106,11 +109,14 @@ export default function Navbar() {
       >
         <div className="px-6 pb-6 space-y-1">
           {PAGE_LINKS.map((link) => {
+            const isSession = link.label === 'Session'
+            const to = isSession && !scanDone ? '/scan' : link.to
             const active = location.pathname === link.to
             return (
               <Link
                 key={link.label}
-                to={link.to}
+                to={to}
+                title={isSession && !scanDone ? 'Complete a scan first — opens Scan' : undefined}
                 className={`block px-4 py-3 rounded-xl text-sm transition-all duration-300 ${
                   active
                     ? 'font-semibold text-foreground bg-white/8'
@@ -118,6 +124,11 @@ export default function Navbar() {
                 }`}
               >
                 {link.label}
+                {isSession && !scanDone && (
+                  <span className="ml-2 text-[10px] px-1.5 py-0.5 rounded-full border border-yellow-500/25 bg-yellow-500/10 text-yellow-300/80 align-middle">
+                    Scan first
+                  </span>
+                )}
               </Link>
             )
           })}

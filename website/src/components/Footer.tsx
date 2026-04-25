@@ -22,11 +22,11 @@ export default function Footer() {
         <div className="grid gap-12 md:grid-cols-3">
           {/* Brand */}
           <div>
-            <Link to="/" className="text-xl font-bold text-foreground" style={{ fontFamily: 'var(--font-heading)' }}>
-              Neuro<span className="text-gradient-hero">Hand</span>
+            <Link to="/" className="inline-flex rounded-lg bg-white/95 p-2 ring-1 ring-white/10 shadow-sm">
+              <img src="/rehab-twin-logo.png" alt="RehabTwin" className="h-11 w-auto max-w-[200px] object-contain object-left" />
             </Link>
             <p className="mt-3 text-sm text-foreground/30 leading-relaxed max-w-xs">
-              AI-powered stroke rehabilitation. Your healthy hand guides the recovery of the other.
+              Track. Train. Recover. AI-powered neuro rehabilitation — your healthy hand guides the other.
             </p>
           </div>
 
@@ -61,7 +61,7 @@ export default function Footer() {
         {/* Bottom bar */}
         <div className="mt-14 pt-6 border-t border-white/[0.04] flex flex-col sm:flex-row items-center justify-between gap-4">
           <p className="text-xs text-foreground/20">
-            © {new Date().getFullYear()} NeuroHand. All rights reserved.
+            © {new Date().getFullYear()} RehabTwin. All rights reserved.
           </p>
           <p className="flex items-center gap-1.5 text-xs text-foreground/20">
             Built with <Heart className="w-3 h-3 text-pink-500/60" /> for rehabilitation
