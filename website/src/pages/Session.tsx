@@ -2,7 +2,7 @@ import { useState, useEffect, useRef, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Hand, Play, Square, Volume2, ArrowRight, RotateCcw, Trophy, Clock, Target, Zap, Brain, ChevronLeft, ChevronRight, Camera, Loader2 } from 'lucide-react'
 import { startSession, endSession, voiceUrl, getLatestScanAnalysis } from '../lib/api'
-import { hasCompletedScan, loadScanSnapshot } from '../lib/sessionGate'
+import { hasCompletedScan, loadScanSnapshot, canOpenSession, disarmSession } from '../lib/sessionGate'
 import {
   GESTURE_LIST,
   GESTURE_MESSAGES,
@@ -321,7 +321,10 @@ export default function Session() {
   }, [])
 
   useEffect(() => {
-    if (!hasCompletedScan()) {
+    // Strict gate: session opens ONLY when user has scanned AND explicitly
+    // clicked "Start Rehab Session" on the results page. Direct URL, navbar
+    // click, or returning after a tab reopen all show the "scan first" screen.
+    if (!canOpenSession()) {
       setSessionPhase('needs_scan')
       return
     }
@@ -630,6 +633,8 @@ export default function Session() {
 
     const elapsed = Math.max(0, tt - tl)
     const intervalSec = INTERVAL_MS[diff] / 1000
+    // Session ended — require another Scan → Start click to re-arm.
+    disarmSession()
     setResult({
       total_score: sc,
       duration: elapsed,
@@ -677,12 +682,15 @@ export default function Session() {
   }, [sessionPhase, cycleGesture, difficulty, poseVerify.ready])
 
   const handleReset = () => {
-    setSessionPhase('setup')
+    // "New Session" from the complete screen: user must Scan → Start again,
+    // so fall back to the gated screen rather than re-entering setup directly.
+    disarmSession()
     setSessionId(null)
     setResult(null)
     setScore(0)
     setTimeLeft(0)
     setMessage('')
+    setSessionPhase('needs_scan')
   }
 
   // ─── Gate / analyzing ─────────────────────────────

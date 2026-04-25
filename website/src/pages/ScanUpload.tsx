@@ -13,7 +13,7 @@ import {
   Loader2,
 } from 'lucide-react'
 import { uploadScan, getScans } from '../lib/api'
-import { saveScanForSession } from '../lib/sessionGate'
+import { saveScanForSession, armSession } from '../lib/sessionGate'
 import {
   Radar,
   RadarChart,
@@ -678,6 +678,7 @@ export default function ScanUpload() {
                 </Link>
                 <Link
                   to="/session"
+                  onClick={() => armSession()}
                   className="flex-1 inline-flex items-center justify-center gap-2 px-6 py-3.5 rounded-xl font-semibold text-foreground border border-white/15 hover:border-white/25 transition-all duration-200"
                 >
                   Start Rehab Session

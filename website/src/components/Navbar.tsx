@@ -60,14 +60,12 @@ export default function Navbar() {
         <div className="hidden items-center gap-1 md:flex">
           {PAGE_LINKS.map((link) => {
             const isSession = link.label === 'Session'
-            const to = isSession && !scanDone ? '/scan' : link.to
-            const active =
-              location.pathname === link.to || (isSession && location.pathname === '/scan' && !scanDone)
+            const active = location.pathname === link.to
             return (
               <Link
                 key={link.label}
-                to={to}
-                title={isSession && !scanDone ? 'Complete a scan first — opens Scan' : undefined}
+                to={link.to}
+                title={isSession && !scanDone ? 'Upload a brain scan first' : undefined}
                 className={`relative px-4 py-2 rounded-lg text-sm transition-all duration-300 ${
                   active
                     ? 'font-semibold text-foreground bg-white/8'
@@ -75,6 +73,9 @@ export default function Navbar() {
                 }`}
               >
                 {link.label}
+                {isSession && !scanDone && (
+                  <span className="ml-1.5 inline-block w-1.5 h-1.5 rounded-full bg-yellow-400/80" title="Scan required" />
+                )}
                 {active && (
                   <span className="absolute bottom-0 left-1/2 -translate-x-1/2 w-4 h-0.5 rounded-full bg-gradient-to-r from-indigo-500 to-purple-500" />
                 )}
@@ -110,13 +111,12 @@ export default function Navbar() {
         <div className="px-6 pb-6 space-y-1">
           {PAGE_LINKS.map((link) => {
             const isSession = link.label === 'Session'
-            const to = isSession && !scanDone ? '/scan' : link.to
             const active = location.pathname === link.to
             return (
               <Link
                 key={link.label}
-                to={to}
-                title={isSession && !scanDone ? 'Complete a scan first — opens Scan' : undefined}
+                to={link.to}
+                title={isSession && !scanDone ? 'Upload a brain scan first' : undefined}
                 className={`block px-4 py-3 rounded-xl text-sm transition-all duration-300 ${
                   active
                     ? 'font-semibold text-foreground bg-white/8'

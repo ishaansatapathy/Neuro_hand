@@ -1,0 +1,24 @@
+{
+  "session_id": "7658a8fe",
+  "status": "active",
+  "started_at": "2026-04-25T07:31:35.506239",
+  "ended_at": null,
+  "config": {
+    "affected_hand": "right",
+    "exercises": [
+      "pinch",
+      "point",
+      "index_only",
+      "open_hand",
+      "thumb_out",
+      "wrist_circle"
+    ],
+    "difficulty": "medium",
+    "duration_minutes": 5
+  },
+  "score": 0,
+  "exercises_completed": 0,
+  "total_exercises": 18,
+  "timeline": [],
+  "duration_seconds": 0
+}

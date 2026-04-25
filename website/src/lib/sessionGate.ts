@@ -55,3 +55,39 @@ export function clearScanGate(): void {
     /* ignore */
   }
 }
+
+/**
+ * "Armed" gate — a short-lived intent flag set by the "Start Rehab Session"
+ * button on the scan results page. sessionStorage so it auto-clears on tab
+ * close, which means a fresh visit must go through Scan → Start button again.
+ */
+const ARMED_KEY = 'nh_session_armed'
+
+export function armSession(): void {
+  try {
+    sessionStorage.setItem(ARMED_KEY, String(Date.now()))
+  } catch {
+    /* ignore */
+  }
+}
+
+export function disarmSession(): void {
+  try {
+    sessionStorage.removeItem(ARMED_KEY)
+  } catch {
+    /* ignore */
+  }
+}
+
+export function isSessionArmed(): boolean {
+  try {
+    return sessionStorage.getItem(ARMED_KEY) !== null
+  } catch {
+    return false
+  }
+}
+
+/** Full check: must have scanned AND clicked Start Rehab Session. */
+export function canOpenSession(): boolean {
+  return hasCompletedScan() && isSessionArmed()
+}
